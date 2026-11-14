@@ -4,7 +4,7 @@ _Last updated: 2026-11-14_
 
 ## The idea in one paragraph
 
-We are building a mobile-first website for Edmonton transit riders, an alternative to the ETS app. A rider enters a start and a destination and sees a few ways to get there, each with a live departure time, total trip time and fare, drawn on a map. On top of that, riders can see how others have rated a bus or train and report problems such as cleanliness, safety or crowding. It runs in a phone browser, so no app store is involved.
+We are building a mobile-first website for Edmonton transit riders, an alternative to the ETS app. A rider enters a start and a destination and sees a few ways to get there, each with a live departure time, total trip time and fare, drawn on a map. It watches transfers live and warns when a connection is at risk. Riders can browse any route to plan by hand. They can also rate the bus they're on, report problems such as cleanliness, safety or crowding, and tell us how accurate our information was. It runs in a phone browser, so no app store is involved.
 
 ## What "done" means for the demo
 
@@ -30,7 +30,9 @@ We build in this order. We don't start a tier until the one before it works end 
 | **3. Nice to have** | **Ride feedback page:** star rating, issue report, and accuracy sliders, all on one page | Our differentiator, but it only works once tiers 1 and 2 do |
 | **Stretch** | **Snow and ice warnings** on options. Traffic colouring on the roads a bus option uses | Both are extras. Snow data only changes during declared snow events. Traffic costs a lot of time and API quota, and we can't cache the speeds, so every search pays full price in API calls. Selected option only, buses only |
 
-> **Scope warning:** the four features added from rider feedback (transfer watch, route browser, feedback page, snow warnings) roughly double the weekend's work. The cut lines matter even more now. If Saturday ends without tier 1 working, everything below tier 2's transfer watch moves to "after the hackathon."
+> **Scope warning:** the four features added from rider feedback (transfer watch, route browser, feedback page, snow warnings) roughly double the weekend's work. The cut lines matter even more now. If Saturday ends without tier 1 working, Sunday's scope shrinks to one-transfer trips and transfer watch. The route browser, feedback page and snow warnings move to "after the hackathon."
+
+**Out of scope this weekend:** accounts and logins, saved places, push notifications, youth, senior and other discounted fares, daily and monthly fare caps, bikes and scooters, trips with more than one transfer, and sending reports to the City.
 
 ## Features from rider feedback
 
@@ -72,7 +74,7 @@ We build in this order. We don't start a tier until the one before it works end 
 
 **What it does:** one page, reached from a **"I'm on this bus"** button on the chosen option. We can't detect boarding by itself, so the button appears from the planned departure time until the planned arrival time. It has:
 
-- **Star rating** for the vehicle (fleet number = `label`).
+- **Star rating** for the vehicle (fleet number = `label`). **Buses only, and only when the live feed has named the vehicle.** Trains and unmatched trips have no `label`, so their page shows just the sliders and the issue report, attached to the route and trip rather than to a vehicle.
 - **Accuracy sliders**, one for each piece of information the app showed. Each runs 1 (way off) to 5 (spot on), and riders can leave any slider untouched:
   - departure and arrival time
   - vehicle position on the map
@@ -99,13 +101,12 @@ We build in this order. We don't start a tier until the one before it works end 
 - **It covers roads, not sidewalks or bus stops.** The City's 311 snow-on-walk complaints are also open data and could feed walking-leg warnings later.
 - **Matching paths to road segments is real spatial work.** Use a simple "within ~20 m of the line" check, and only on the selected option.
 
-**Out of scope this weekend:** accounts and logins, saved places, push notifications, youth, senior and other discounted fares, daily and monthly fare caps, bikes and scooters, trips with more than one transfer, and sending reports to the City.
-
 ## How it fits together
 
 ```
 Phone browser  ──►  Our server (Next.js on Vercel)  ──►  ETS schedule + live feeds
-                                                    ──►  Neon Postgres (schedule index, ratings)
+                                                    ──►  City snow clearing data (stretch)
+                                                    ──►  Neon Postgres (schedule index, feedback)
 Phone browser  ──►  TomTom map tiles + address search (direct, key restricted to our domain)
 ```
 
@@ -118,14 +119,15 @@ Phone browser  ──►  TomTom map tiles + address search (direct, key restric
 
 - **The browser only talks to our server** for transit data. The server reads the City's feeds and sends back only what a given search needs.
 - **No caching of TomTom content.** TomTom's terms allow only temporary client-side caching, and only within the response's Cache-Control headers. So:
-  - The browser calls TomTom directly for map tiles and address search, and the browser's normal HTTP cache follows TomTom's headers. We don't add a service worker or local-storage cache for TomTom responses.
+  - The browser calls TomTom directly for map tiles and address search, and the browser's normal HTTP cache follows TomTom's headers. The search box also lists matching stops and routes from our own index. Those cost nothing, so they appear first. "Your location" comes from the phone's geolocation, not from TomTom. We don't add a service worker or local-storage cache for TomTom responses.
   - Our server, Neon and the demo snapshot never store TomTom responses. That covers tiles, search results, coordinates from a search, and traffic speeds. The plan request sends the coordinates the rider picked, and we use them for that search only.
   - If the server ever has to call TomTom (stretch tier traffic only), it uses `fetch(..., { cache: "no-store" })` and passes TomTom's Cache-Control headers through unchanged. Next.js caches `fetch` calls by default, so this is easy to get wrong.
-- **Live feeds are cached for about 30 seconds** using Next.js's built-in data cache (`fetch` with `revalidate: 30`). We don't rely on in-memory state, because Vercel runs many short-lived copies of the server.
+- **Live feeds are cached for 30 seconds in each server instance's memory**, decoded once per refresh. When several requests arrive during a refresh, they share one download. We don't use Next.js's data cache: it refuses items over 2 MB, and trip updates is already 1.7 MB. Vercel runs several short-lived copies of the server, so each copy keeps its own cache. That means a few extra downloads a minute at most, which the City's feed handles easily. If a refresh fails, we keep serving the last good copy and show its age.
 - **The schedule is preprocessed by a script**, not at request time. The script downloads `gtfs.zip`, records each stop's fare zone, trims it to the next 7 service days and the columns we need, and loads it into Neon. ETS republishes the zip every few weeks, so the script must be safe to rerun.
-- **Time:** all "now" and "today" logic goes through one helper using the `America/Edmonton` timezone. Never hardcode a UTC offset. **Alberta does observe daylight saving time** (UTC−7 in winter, UTC−6 in summer). GTFS times can go past 24:00 (for example, `25:10:00` is 1:10 a.m. on the next calendar day but belongs to the previous service day). Store them as a service date plus seconds since midnight.
+- **Time:** all "now" and "today" logic goes through one helper using the `America/Edmonton` timezone. Never hardcode a UTC offset. **Alberta does observe daylight saving time** (UTC−7 in winter, UTC−6 in summer). GTFS times can go past 24:00 (for example, `25:10:00` is 1:10 a.m. on the next calendar day but belongs to the previous service day). Store them as a service date plus seconds since midnight. Strictly, GTFS counts from "noon minus 12 hours", which differs from midnight only on the two daylight-saving changeover days. Use a date library that handles the timezone, and never add seconds to a UTC midnight.
 - **Live versus scheduled:** if the trip-updates feed has a prediction, show it and label it **Live**. Otherwise show the schedule and label it **Scheduled**. If the live data is more than a couple of minutes old, say so on screen.
-- **Fares:** show the standard adult Arc and tap fare, looked up in the zone table below by the trip's first boarding stop and last alighting stop. Transfers within 90 minutes are included. Trips entirely within Edmonton also show the $3.75 cash fare. Read the amounts from the fare files in `gtfs.zip`, so a price change arrives with the next schedule.
+- **Fares:** show the standard adult Arc and tap fare, looked up in the zone table below by the trip's first boarding stop and last alighting stop. Transfers within 90 minutes are included. Trips entirely within Edmonton also show the $3.75 cash fare. The amounts come from our fare table config file, and each stop's zone comes from `stop_areas.txt` in `gtfs.zip`. Don't use the feed's fare amounts, which are out of date for regional trips.
+- **Crowding:** when a bus reports `occupancy_status`, its leg shows "Not crowded", "Some standing" or "Full". This costs nothing extra and comes with the vehicle dots in tier 2.
 - **Trains:** LRT has no live data in the City's feeds, so train legs always show Scheduled.
 - **Route line colours** should be clearly distinguishable from each other and visible on the basemap. Avoid white on a light map. If we do traffic colouring, also avoid green, yellow, orange and red.
 - **Feedback (tier 3):** no login. The first visit sets an HttpOnly cookie holding a random ID. A ride is a vehicle `label`, a trip and a service day. One feedback record per ride per rider, and resubmitting updates it. Public cards show the average stars and counts per issue category. Free-text notes and slider scores are stored but never shown publicly.
@@ -146,7 +148,7 @@ Phone browser  ──►  TomTom map tiles + address search (direct, key restric
       "leaveAt": "2026-11-14T18:07:00-07:00",
       "arriveAt": "2026-11-14T18:41:00-07:00",
       "durationMinutes": 34,
-      "fare": { "amount": 3.00, "label": "Adult, Arc or tap. Transfers included" },
+      "fare": { "amount": 3.00, "cashAmount": 3.75, "estimated": false, "label": "Adult, Arc or tap. Transfers included" },
       "alerts": [{ "headline": "Detour on 82 St" }],
       "transfer": {
         "stop": "Stop 5678", "spareMinutes": 2, "status": "tight",
@@ -157,9 +159,10 @@ Phone browser  ──►  TomTom map tiles + address search (direct, key restric
         { "mode": "walk", "minutes": 5, "path": [[53.54, -113.49], ["..."]] },
         {
           "mode": "bus", "route": "9", "headsign": "Downtown",
-          "departAt": "2026-11-14T18:12:00-07:00", "realtime": true,
-          "fromStop": "Stop 1234", "toStop": "Stop 5678",
-          "vehicleLabel": "4393", "path": [["..."]]
+          "tripId": "33560745", "serviceDate": "2026-11-14",
+          "departAt": "2026-11-14T18:12:00-07:00", "arriveAt": "2026-11-14T18:30:00-07:00",
+          "realtime": true, "fromStop": "Stop 1234", "toStop": "Stop 5678",
+          "vehicleLabel": "4393", "occupancy": "some_standing", "path": [["..."]]
         },
         { "mode": "walk", "minutes": 3, "path": [["..."]] }
       ]
@@ -168,17 +171,35 @@ Phone browser  ──►  TomTom map tiles + address search (direct, key restric
 }
 ```
 
+Notes on the fields:
+- `liveDataAgeSeconds` is `null` when no live data has ever loaded.
+- When `options` is empty, a top-level `emptyReason` says why: `no_stops_near_start`, `no_stops_near_end` or `no_trips_soon`. Otherwise it's `null`.
+- `transfer` is `null` on direct trips. `status` is one of `on_track`, `tight` or `at_risk`, and `basedOn` is `live` or `scheduled`.
+- `vehicleLabel` and `occupancy` are `null` when the feed hasn't named the vehicle. For train legs, `mode` is `"rail"`.
+
+The other endpoints. Their shapes go in the fixture file too:
+
+| Endpoint | Tier | Returns |
+|---|---|---|
+| `GET /api/search?q=` | 1 | Up to 5 stops and 5 routes from our own index whose name or number matches. Shown before TomTom's address suggestions |
+| `GET /api/live?keys=liveKey,liveKey` | 2 | Fresh predictions, positions and transfer status for the options the rider has open. Each option carries a `liveKey` that encodes its trips, stops and scheduled times, so this endpoint needs no database. Transfer watch polls it every 30 seconds instead of re-planning |
+| `GET /api/routes` | 2 | Every route: id, number, name, type (bus, rail or regional), colour |
+| `GET /api/routes/:id` | 2 | One route's path, stops, next departures, live vehicles and alerts |
+| `POST /api/feedback` | 3 | Saves stars, sliders, issue and note for one ride. Updates an existing record for the same rider and ride |
+| `GET /api/vehicles/:label` | 3 | Public summary: average stars and recent issue counts |
+
 Fields can change, but change them in the fixture file first and tell the team.
 
 ## Who does what
 
-Four workstreams. Assign a name to each at kickoff.
+Assign a name to each workstream at kickoff. Database and feedback can wait until someone frees up.
 
 | Workstream | Owns | First deliverable |
 |---|---|---|
-| **Data and planner** | GTFS preprocessing, live feed decoding, the `/api/plan` endpoint | Direct-route options for one real pair of places |
-| **Screens** | Search screen, results list, option detail, mobile layout | Screens working against the fixture |
-| **Map** | TomTom map, route lines, vehicle dots, fitting the view to the options | Fixture options drawn on the map |
+| **Data and planner** | GTFS preprocessing, live feed decoding, fares, `/api/plan`, then transfers, transfer watch (`/api/live`) and snow matching | Direct-route options for one real pair of places |
+| **Screens** | Search screen, results list, option detail, mobile layout, then the Routes tab and the feedback page | Screens working against the fixture |
+| **Map** | TomTom map, route lines, vehicle dots, fitting the view to the options, then route browser maps | Fixture options drawn on the map |
+| **Database and feedback** (whoever finishes tier 1 work first) | Neon setup, cookie profile, `/api/feedback`, `/api/vehicles/:label`, storing predictions for the accuracy measurement | Feedback saved and read back from Neon |
 | **Product and demo** (great fit for a non-technical teammate) | Checking fares and facts, picking demo trips, writing on-screen text, testing on real phones, the pitch and slides, recording the backup demo | A list of 3 demo trips with what the ETS app shows for each |
 
 ## Schedule
@@ -260,7 +281,8 @@ The card labels italic amounts as **"estimated"**. Store the table as a config f
 | Risk | What we do about it |
 |---|---|
 | The trip planner takes longer than expected | Ship direct routes first. Transfers are tier 2 |
-| The schedule data is too big for free hosting | Measure it early. Keep only the next few days |
+| The schedule data is too big for free hosting | Measure it early. Keep only the next 7 days |
+| Snow warnings can't be shown on a clear day | Demo from a saved snow-event sample, labelled as such |
 | The City's live feed is down during the demo | Snapshot switch, plus "Scheduled" labels still work |
 | TomTom's free licence is evaluation-only | Fine for the demo. Before a public launch, take a TomTom plan or switch map provider |
 | TomTom quota runs out (requests get blocked) | Address suggestions only after the rider pauses typing. Watch the dashboard. Traffic stays a stretch goal |
