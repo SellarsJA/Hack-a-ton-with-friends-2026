@@ -4,6 +4,8 @@ Run by hand with the team's own Vercel, Neon and TomTom accounts.
 
 Environment variables: `DATABASE_URL`, `NEXT_PUBLIC_TOMTOM_KEY`, `LIVE_SOURCE` (`city` by default, or `snapshot`).
 
+**`npm run db:migrate` is the same script as `db:schema`: it applies `db/schema.sql` and then `db/feedback.sql` (the `profiles`, `feedback` and `predictions` tables). Every statement is idempotent, and the GTFS import never truncates the feedback tables. Existing `db:schema` steps below remain valid.**
+
 **The scripts (`db:schema`, `import-gtfs`) do not load `.env.local`.** Pass the variable on the command line as shown below, or run the script with Node's env-file flag, e.g. `npx tsx --env-file=.env.local scripts/import-gtfs/index.ts`.
 
 Each command is shown for bash and for PowerShell (the team uses Windows). In the bash examples, paste the full Neon connection string inside the single quotes, because it contains `&` characters that bash would otherwise split on.

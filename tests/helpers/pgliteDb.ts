@@ -19,10 +19,8 @@ async function insertRows(pg: PGlite, table: string, cols: string[], rows: unkno
   }
 }
 
-/** Fresh in-process Postgres loaded with tests/fixtures/gtfs-mini (window 2026-11-14 + 7 days). */
-export async function makeTestDb(): Promise<Db> {
-  const pg = new PGlite()
-  await pg.exec(readFileSync(join(ROOT, 'db/schema.sql'), 'utf8'))
+/** Inserts tests/fixtures/gtfs-mini (window 2026-11-14 + 7 days) into the schedule tables. */
+export async function loadFixture(pg: PGlite): Promise<void> {
   const f = await transformFeed(
     async (name) => {
       const p = join(FIXTURE, name)
@@ -38,6 +36,14 @@ export async function makeTestDb(): Promise<Db> {
   await insertRows(pg, 'shapes', ['shape_id', 'points'], f.shapes.map((s) => [s.shapeId, JSON.stringify(s.points)]))
   await insertRows(pg, 'feed_meta', ['feed_version', 'window_start', 'window_end'], [[f.feedMeta.feedVersion, f.feedMeta.windowStart, f.feedMeta.windowEnd]])
   await insertRows(pg, 'stop_links', ['from_stop', 'to_stop', 'walk_s'], f.stopLinks.map((l) => [l.fromStop, l.toStop, l.walkS]))
+}
+
+/** Fresh in-process Postgres with schedule + feedback tables, loaded with tests/fixtures/gtfs-mini. */
+export async function makeTestDb(): Promise<Db> {
+  const pg = new PGlite()
+  await pg.exec(readFileSync(join(ROOT, 'db/schema.sql'), 'utf8'))
+  await pg.exec(readFileSync(join(ROOT, 'db/feedback.sql'), 'utf8'))
+  await loadFixture(pg)
   return {
     async query<T = Record<string, unknown>>(text: string, params?: unknown[]) {
       return (await pg.query<T>(text, params)).rows

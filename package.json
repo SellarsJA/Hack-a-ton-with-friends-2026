@@ -11,6 +11,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "import-gtfs": "tsx scripts/import-gtfs/index.ts",
+    "db:migrate": "tsx scripts/apply-schema.ts",
     "db:schema": "tsx scripts/apply-schema.ts"
   },
   "dependencies": {

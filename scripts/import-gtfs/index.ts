@@ -25,6 +25,11 @@ export const SCHEDULE_TABLES = [
   'stop_links',
 ] as const
 
+/** The exact statement load() runs before reloading. No cascade: nothing may reference schedule tables. */
+export function truncateScheduleSql(): string {
+  return `truncate ${SCHEDULE_TABLES.join(', ')}`
+}
+
 /**
  * Import window: starts yesterday (Edmonton) so trips from yesterday's service that run
  * past midnight survive an import, then covers today plus the next 6 days.
@@ -81,7 +86,7 @@ export async function load(sql: Sql, f: FeedRows): Promise<Record<string, number
   }
   const counts: Record<string, number> = {}
   await sql.begin(async (tx) => {
-    await tx.unsafe(`truncate ${SCHEDULE_TABLES.join(', ')}`)
+    await tx.unsafe(truncateScheduleSql())
     for (const t of SCHEDULE_TABLES) {
       const [cols, rows] = tables[t]
       await copyRows(tx as unknown as Sql, t, cols, rows)

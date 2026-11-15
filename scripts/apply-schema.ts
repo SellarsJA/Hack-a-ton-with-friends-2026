@@ -7,8 +7,10 @@ async function main() {
   if (!url) throw new Error('DATABASE_URL is not set')
   const sql = postgres(url, { onnotice: () => {} })
   try {
-    await sql.unsafe(readFileSync(join(process.cwd(), 'db/schema.sql'), 'utf8'))
-    console.log('Applied db/schema.sql')
+    for (const file of ['db/schema.sql', 'db/feedback.sql']) {
+      await sql.unsafe(readFileSync(join(process.cwd(), file), 'utf8'))
+      console.log(`Applied ${file}`)
+    }
   } finally {
     await sql.end()
   }
