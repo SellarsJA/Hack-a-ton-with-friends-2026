@@ -388,7 +388,7 @@
       "alerts": [],
       "transfer": {
         "stop": "Whyte Ave & 104 St",
-        "spareMinutes": 2,
+        "spareMinutes": 3,
         "status": "tight",
         "basedOn": "scheduled",
         "fallbackDepartAt": null

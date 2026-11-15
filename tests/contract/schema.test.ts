@@ -36,6 +36,30 @@ describe('contract schema', () => {
     for (const opt of parsed.options) expect(opt.liveKey.length).toBeGreaterThan(0);
   });
 
+  it('transfer spareMinutes matches the legs in plan.json and live.json', () => {
+    const spare = (
+      transit: { departAt: string; arriveAt: string }[],
+      walkMin: number | null,
+    ) => (Date.parse(transit[1].departAt) - Date.parse(transit[0].arriveAt)) / 60000 - (walkMin ?? 0);
+    const plan = PlanResponse.parse(fixture);
+    const walkByKey = new Map<string, number | null>();
+    let checked = 0;
+    for (const o of plan.options) {
+      if (!o.transfer) continue;
+      const transit = o.legs.flatMap((l) => (l.mode === 'walk' ? [] : [l]));
+      expect(transit).toHaveLength(2);
+      walkByKey.set(o.liveKey, transit[1].transferWalkMinutesBefore);
+      expect(o.transfer.spareMinutes).toBe(spare(transit, transit[1].transferWalkMinutesBefore));
+      checked++;
+    }
+    for (const o of LiveResponse.parse(live).options) {
+      if (!o.transfer) continue;
+      expect(o.transfer.spareMinutes).toBe(spare(o.legs, walkByKey.get(o.liveKey) ?? null));
+      checked++;
+    }
+    expect(checked).toBeGreaterThanOrEqual(2);
+  });
+
   it('parses the live, routes and route-detail fixtures', () => {
     const l = LiveResponse.parse(live);
     expect(l.options[0].expired).toBe(true);
