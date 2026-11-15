@@ -21,7 +21,7 @@ select st.trip_id, d.service_date::text service_date, t.route_id, t.headsign, st
 from unnest($2::date[], $3::int[]) as d(service_date, now_s)
 cross join lateral (
   select s.trip_id, s.stop_sequence, s.dep from stop_times s
-  where s.stop_id = $1 and s.dep between d.now_s and d.now_s + ${WINDOW_SECONDS}) st
+  where s.stop_id = $1 and s.dep between d.now_s - 1800 and d.now_s + ${WINDOW_SECONDS}) st
 join trips t on t.trip_id = st.trip_id
 join service_dates sd on sd.service_id = t.service_id and sd.date = d.service_date
 join routes r on r.route_id = t.route_id
@@ -42,7 +42,7 @@ export async function nextDepartures(
     days.map((d) => d.serviceDate),
     days.map((d) => d.nowSeconds),
     routeId ?? null,
-    Math.max(limit * 3, 20),
+    Math.max(limit * 4, 60),
   ])
   return rows
     .map((r): Departure => {

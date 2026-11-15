@@ -60,4 +60,23 @@ describe('nextDepartures', () => {
     const r = await nextDepartures(db, { stopId: '1001', afterEpoch: t(18, 0), limit: 5, live })
     expect(r[0]).toMatchObject({ tripId: 'A', departEpoch: t(18, 10) + 240, realtime: true })
   })
+
+  const liveA = (dep: number): LiveIndex => ({
+    feedTimestamp: 0,
+    trips: new Map([
+      ['A', { startDate: DATE, stops: [{ stopSequence: 1, stopId: '1001', arrival: null, departure: dep, delay: null }], vehicle: null }],
+    ]),
+    alerts: [],
+  })
+
+  it('keeps a late-but-coming bus scheduled before afterEpoch', async () => {
+    const r = await nextDepartures(db, { stopId: '1001', afterEpoch: t(18, 15), limit: 5, live: liveA(t(18, 10) + 600) })
+    expect(r).toHaveLength(1)
+    expect(r[0]).toMatchObject({ tripId: 'A', departEpoch: t(18, 20), realtime: true })
+  })
+
+  it('drops a trip whose live time moved before afterEpoch', async () => {
+    const r = await nextDepartures(db, { stopId: '1001', afterEpoch: t(18, 15), limit: 5, live: liveA(t(18, 12)) })
+    expect(r).toEqual([])
+  })
 })
