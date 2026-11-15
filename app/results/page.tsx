@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { PlanResponse } from '@/src/contract/schema'
+import { parseLatLng } from '@/src/geo/geo'
 import LiveBanner from '@/components/LiveBanner'
 import OptionList from '@/components/OptionList'
 import OptionDetail from '@/components/OptionDetail'
@@ -16,15 +17,13 @@ const EMPTY_TEXT = {
   no_trips_soon: 'No direct trips in the next 90 minutes.',
 } as const
 
-const COORD = /^-?\d+(\.\d+)?,-?\d+(\.\d+)?$/
-
 function Results() {
   const params = useSearchParams()
   const from = params.get('from') ?? ''
   const to = params.get('to') ?? ''
   const fromLabel = params.get('fromLabel') || 'Start'
   const toLabel = params.get('toLabel') || 'Destination'
-  const valid = COORD.test(from) && COORD.test(to)
+  const valid = parseLatLng(from) !== null && parseLatLng(to) !== null
 
   const [state, setState] = useState<State>({ kind: 'loading' })
   const [selectedId, setSelectedId] = useState<string | null>(null)

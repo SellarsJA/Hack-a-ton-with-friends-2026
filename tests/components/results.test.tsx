@@ -68,6 +68,19 @@ describe('OptionList', () => {
   })
 })
 
+describe('OptionDetail', () => {
+  it('labels vehicles Train for rail and Bus for bus', () => {
+    const base = plan.options[0].legs.find((l) => l.mode !== 'walk')!
+    const rail = { ...plan.options[0], legs: [{ ...base, mode: 'rail' as const, vehicleLabel: '1012' }] }
+    const { unmount } = render(<OptionDetail option={rail} />)
+    expect(screen.getByText('Train 1012')).toBeTruthy()
+    unmount()
+    const bus = { ...rail, legs: [{ ...base, mode: 'bus' as const, vehicleLabel: '4393' }] }
+    render(<OptionDetail option={bus} />)
+    expect(screen.getByText('Bus 4393')).toBeTruthy()
+  })
+})
+
 describe('LiveBanner', () => {
   it('shows unavailable when null', () => {
     render(<LiveBanner ageSeconds={null} />)
@@ -155,6 +168,14 @@ describe('results page', () => {
 
   it('handles missing params', () => {
     search = 'from=abc'
+    const f = mockFetch(() => ok(fixture))
+    render(<ResultsPage />)
+    expect(screen.getByText('Missing start or destination.')).toBeTruthy()
+    expect(f).not.toHaveBeenCalled()
+  })
+
+  it('rejects out-of-range coordinates without fetching', () => {
+    search = 'from=999,999&to=53.4,-113.4'
     const f = mockFetch(() => ok(fixture))
     render(<ResultsPage />)
     expect(screen.getByText('Missing start or destination.')).toBeTruthy()

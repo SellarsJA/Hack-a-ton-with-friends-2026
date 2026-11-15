@@ -15,7 +15,7 @@ export default function OptionDetail({ option }: { option: Option }) {
             </span>
             <span>{`From ${leg.fromStop} at ${clock(leg.departAt)}`}</span>
             <span>{`To ${leg.toStop} at ${clock(leg.arriveAt)}`}</span>
-            {leg.vehicleLabel && <span>{`Bus ${leg.vehicleLabel}`}</span>}
+            {leg.vehicleLabel && <span>{`${leg.mode === 'rail' ? 'Train' : 'Bus'} ${leg.vehicleLabel}`}</span>}
           </li>
         ),
       )}
