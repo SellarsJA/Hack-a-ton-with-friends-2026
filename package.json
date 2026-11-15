@@ -12,6 +12,7 @@
     "db:schema": "tsx scripts/apply-schema.ts"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.2.1",
     "csv-parse": "^7.0.3",
     "gtfs-realtime-bindings": "^2.2.0",
     "luxon": "^3.7.2",
