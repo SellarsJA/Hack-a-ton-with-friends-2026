@@ -86,7 +86,7 @@ describe('assembleTransferOptions', () => {
     for (const o of [{ type2: 0 }, { type1: 1 }]) {
       const [opt] = await assembleTransferOptions([tc(o)], ctx(bothLive()))
       const transit = opt.legs.filter((l) => l.mode !== 'walk')
-      expect(transit.every((l) => l.mode !== 'walk' && l.realtime)).toBe(true)
+      expect(transit.every((l) => 'realtime' in l && l.realtime)).toBe(true)
       expect(opt.legs.filter((l) => l.mode === 'rail')).toHaveLength(1)
       expect(opt.transfer!.basedOn).toBe('scheduled')
     }
