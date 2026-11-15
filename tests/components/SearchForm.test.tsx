@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, cleanup } from '@testing-library/react'
+import { render, screen, waitFor, cleanup, act, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach } from 'vitest'
 
@@ -8,6 +8,7 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push }) }))
 vi.mock('@/src/tomtom/suggest', () => ({ suggestAddresses: vi.fn() }))
 
 import { suggestAddresses } from '@/src/tomtom/suggest'
+import type { Place } from '@/src/tomtom/place'
 import SearchForm from '@/components/SearchForm'
 
 const suggest = vi.mocked(suggestAddresses)
@@ -115,5 +116,80 @@ describe('SearchForm', () => {
     await user.keyboard('{ArrowDown}{Enter}')
     expect(input('Destination').value).toBe('Church Stop')
     expect(screen.queryByRole('listbox')).toBeNull()
+  })
+
+  it('ignores a late geolocation fix after the rider picked a start', async () => {
+    let ok: PositionCallback = () => {}
+    geo((cb) => {
+      ok = cb
+    })
+    const user = userEvent.setup()
+    render(<SearchForm />)
+    await user.type(input('Start'), 'chur')
+    await user.click(await screen.findByRole('option', { name: /Church Stop/ }))
+    await user.type(input('Destination'), 'chur')
+    await user.click(await screen.findByRole('option', { name: /Church Rd/ }))
+    act(() => ok({ coords: { latitude: 1, longitude: 2 } } as GeolocationPosition))
+    expect(input('Start').value).toBe('Church Stop')
+    await user.click(button())
+    const url = new URL(push.mock.calls[0][0], 'http://x')
+    expect(url.searchParams.get('from')).toBe('53.7,-113.3')
+    expect(url.searchParams.get('fromLabel')).toBe('Church Stop')
+  })
+
+  it('typing in the start field replaces "Your location" while locating', async () => {
+    geo(() => {})
+    const user = userEvent.setup()
+    render(<SearchForm />)
+    await user.type(input('Start'), 'x')
+    expect(input('Start').value).toBe('x')
+  })
+
+  it('typing in the start field replaces "Your location" once located', async () => {
+    located()
+    const user = userEvent.setup()
+    render(<SearchForm />)
+    await waitFor(() => expect(screen.queryByText('Locating…')).toBeNull())
+    await user.type(input('Start'), 'x')
+    expect(input('Start').value).toBe('x')
+  })
+
+  it('waits the full 300 ms before asking TomTom', async () => {
+    located()
+    vi.useFakeTimers()
+    try {
+      render(<SearchForm />)
+      fireEvent.change(input('Destination'), { target: { value: 'chur' } })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(299)
+      })
+      expect(suggest).not.toHaveBeenCalled()
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1)
+      })
+      expect(suggest).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('a stale response arriving after a newer query does not replace newer results', async () => {
+    located()
+    let resolveStale: (p: Place[]) => void = () => {}
+    suggest.mockReset()
+    suggest
+      .mockImplementationOnce(() => new Promise<Place[]>((r) => (resolveStale = r)))
+      .mockResolvedValueOnce([{ kind: 'address', label: 'Fresh Rd', lat: 1, lon: 1 }])
+    const user = userEvent.setup()
+    render(<SearchForm />)
+    await user.type(input('Destination'), 'chur')
+    await waitFor(() => expect(suggest).toHaveBeenCalledTimes(1))
+    await user.type(input('Destination'), 'c')
+    await waitFor(() => expect(screen.getByRole('option', { name: /Fresh Rd/ })).toBeTruthy())
+    await act(async () => {
+      resolveStale([{ kind: 'address', label: 'Stale Rd', lat: 2, lon: 2 }])
+    })
+    expect(screen.queryByRole('option', { name: /Stale Rd/ })).toBeNull()
+    expect(screen.getByRole('option', { name: /Fresh Rd/ })).toBeTruthy()
   })
 })

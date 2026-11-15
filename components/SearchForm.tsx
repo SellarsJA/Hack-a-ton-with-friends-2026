@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import PlaceField from './PlaceField'
 import type { Place } from '@/src/tomtom/place'
@@ -12,6 +12,8 @@ export default function SearchForm() {
   const [start, setStart] = useState<Place | null>(null)
   const [dest, setDest] = useState<Place | null>(null)
   const [locating, setLocating] = useState<Locating>('pending')
+  // Once the rider types or picks a start, a late GPS fix must not overwrite it.
+  const touchedStart = useRef(false)
 
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -20,6 +22,7 @@ export default function SearchForm() {
     }
     navigator.geolocation.getCurrentPosition(
       (pos) => {
+        if (touchedStart.current) return
         setStart({
           kind: 'current',
           label: 'Your location',
@@ -28,7 +31,9 @@ export default function SearchForm() {
         })
         setLocating('done')
       },
-      () => setLocating('denied'),
+      () => {
+        if (!touchedStart.current) setLocating('denied')
+      },
     )
   }, [])
 
@@ -51,6 +56,7 @@ export default function SearchForm() {
         placeholder="Start"
         value={start}
         onChange={(p) => {
+          touchedStart.current = true
           setStart(p)
           setLocating((l) => (l === 'pending' ? 'done' : l))
         }}

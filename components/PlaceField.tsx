@@ -66,7 +66,9 @@ export default function PlaceField({
     }
   }, [query])
 
-  function type(next: string) {
+  function type(raw: string) {
+    // Typing over non-draft text ("Your location" or a picked label) replaces it.
+    const next = draft === null && text && raw.startsWith(text) ? raw.slice(text.length) : raw
     setDraft(next)
     onChange(null)
     if (next.trim().length === 0) {
@@ -119,7 +121,7 @@ export default function PlaceField({
         onChange={(e) => type(e.target.value)}
         onKeyDown={onKeyDown}
         onFocus={(e) => {
-          if (value?.kind === 'current') e.target.select()
+          if (draft === null) e.target.select()
         }}
         className="h-12 w-full rounded-lg border border-zinc-300 bg-white px-3 text-base text-black dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
       />
