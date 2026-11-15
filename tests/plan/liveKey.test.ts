@@ -20,6 +20,35 @@ describe('liveKey', () => {
     expect(decodeLiveKey(encodeLiveKey({ legs: [{ ...leg, bq: '1' as unknown as number }], tw: null }))).toBeNull()
   })
 
+  it('rejects tampered keys', () => {
+    const enc = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('base64url')
+    const ok = (l: Record<string, unknown> = {}, tw: unknown = null) => enc({ legs: [{ ...leg, ...l }], tw })
+    expect(decodeLiveKey(ok())).not.toBeNull()
+    expect(decodeLiveKey(ok({ extra: 1 }))).toBeNull()
+    expect(decodeLiveKey(enc({ legs: [leg], tw: null, x: 1 }))).toBeNull()
+    for (const k of ['bq', 'aq', 'bt', 'at']) {
+      expect(decodeLiveKey(ok({ [k]: -1 }))).toBeNull()
+      expect(decodeLiveKey(ok({ [k]: 1.5 }))).toBeNull()
+    }
+    expect(decodeLiveKey(ok({ d: '2026-1-14' }))).toBeNull()
+    expect(decodeLiveKey(ok({ d: '2026-11-14x' }))).toBeNull()
+    for (const k of ['t', 'bs', 'as', 'r']) {
+      expect(decodeLiveKey(ok({ [k]: '' }))).toBeNull()
+      expect(decodeLiveKey(ok({ [k]: 'x'.repeat(65) }))).toBeNull()
+      expect(decodeLiveKey(ok({ [k]: 'x'.repeat(64) }))).not.toBeNull()
+    }
+    expect(decodeLiveKey(ok({}, -1))).toBeNull()
+    expect(decodeLiveKey(ok({}, 1.5))).toBeNull()
+    // leg count must agree with tw
+    expect(decodeLiveKey(ok({}, 120))).toBeNull()
+    expect(decodeLiveKey(enc({ legs: [leg, leg], tw: null }))).toBeNull()
+    expect(decodeLiveKey(enc({ legs: [leg, leg], tw: 120 }))).not.toBeNull()
+  })
+
+  it('rejects keys longer than 1024 characters before decoding', () => {
+    expect(decodeLiveKey('A'.repeat(1025))).toBeNull()
+  })
+
   it('builds a leg from a candidate', () => {
     const stop = (id: string) => ({ stopId: id, name: id, lat: 0, lon: 0, zone: '1EDM', distanceM: 0, walkSeconds: 0 })
     const c: Candidate = {
