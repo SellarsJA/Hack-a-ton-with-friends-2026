@@ -8,6 +8,7 @@ export default function OptionList({
   onSelect,
   expired = false,
   onSearchAgain,
+  now,
 }: {
   options: Option[]
   selectedId: string | null
@@ -15,6 +16,8 @@ export default function OptionList({
   /** The selected option has already left. */
   expired?: boolean
   onSearchAgain?: () => void
+  /** Epoch ms from the live poll; enables the on-board button on the selected option. */
+  now?: number
 }) {
   return (
     <ul className="flex flex-col gap-3">
@@ -41,7 +44,7 @@ export default function OptionList({
               </button>
             )}
             {/* Steps sit directly under the tapped card so they are on screen on a phone. */}
-            {selected && <OptionDetail option={o} />}
+            {selected && <OptionDetail option={o} now={now} />}
           </li>
         )
       })}

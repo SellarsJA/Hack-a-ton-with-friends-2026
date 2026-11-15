@@ -24,3 +24,18 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Ride feedback sliders: 44px touch target for the thumb. */
+.feedback-range {
+  height: 44px;
+  background: transparent;
+  accent-color: #1d4ed8;
+}
+.feedback-range::-webkit-slider-thumb {
+  height: 44px;
+  width: 44px;
+}
+.feedback-range::-moz-range-thumb {
+  height: 44px;
+  width: 44px;
+}

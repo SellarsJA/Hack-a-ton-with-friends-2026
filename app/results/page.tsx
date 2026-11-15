@@ -147,6 +147,7 @@ function Results() {
                   onSelect={setSelectedId}
                   expired={expired}
                   onSearchAgain={retry}
+                  now={live.now}
                 />
               </>
             )}
