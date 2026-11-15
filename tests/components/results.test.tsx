@@ -14,6 +14,14 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(search),
 }))
 
+// jsdom has no WebGL: stand in for the dynamically loaded TripMap with a placeholder.
+vi.mock('next/dynamic', () => ({
+  default: () =>
+    function TripMapStub({ showWalking }: { showWalking: boolean }) {
+      return <div data-testid="map" data-show-walking={String(showWalking)} />
+    },
+}))
+
 const plan = PlanResponse.parse(fixture)
 
 function Harness() {

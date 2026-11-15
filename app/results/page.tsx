@@ -1,6 +1,7 @@
 'use client'
 
 import { Suspense, useCallback, useEffect, useState } from 'react'
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { PlanResponse } from '@/src/contract/schema'
@@ -8,6 +9,8 @@ import { parseLatLng } from '@/src/geo/geo'
 import LiveBanner from '@/components/LiveBanner'
 import OptionList from '@/components/OptionList'
 import OptionDetail from '@/components/OptionDetail'
+
+const TripMap = dynamic(() => import('@/components/TripMap'), { ssr: false })
 
 type State = { kind: 'loading' } | { kind: 'error' } | { kind: 'ok'; plan: PlanResponse }
 
@@ -79,11 +82,16 @@ function Results() {
         </Link>
         <h1 className="min-w-0 flex-1 truncate text-base font-semibold">{`${fromLabel} → ${toLabel}`}</h1>
       </header>
-      <div
-        data-testid="map"
-        data-show-walking={String(showWalking)}
-        className="h-[45%] shrink-0 bg-zinc-200 dark:bg-zinc-800"
-      />
+      <div className="h-[45%] shrink-0 bg-zinc-200 dark:bg-zinc-800">
+        {state.kind === 'ok' && state.plan.options.length > 0 && (
+          <TripMap
+            options={state.plan.options}
+            selectedId={selectedId}
+            showWalking={showWalking}
+            onSelect={setSelectedId}
+          />
+        )}
+      </div>
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
         {state.kind === 'loading' && <p role="status">Finding trips…</p>}
         {state.kind === 'error' && (
