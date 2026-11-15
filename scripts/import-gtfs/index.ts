@@ -5,9 +5,10 @@ import { join } from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { pathToFileURL } from 'node:url'
+import type { DateTime } from 'luxon'
 import postgres from 'postgres'
 import { Open } from 'unzipper'
-import { nowInEdmonton } from '../../src/time/edmonton'
+import { nowInEdmonton, ZONE } from '../../src/time/edmonton'
 import { transformFeed, type FeedRows } from './transform'
 
 export const GTFS_URL = 'https://gtfs.edmonton.ca/TMGTFSRealTimeWebService/GTFS/gtfs.zip'
@@ -22,6 +23,14 @@ export const SCHEDULE_TABLES = [
   'shapes',
   'feed_meta',
 ] as const
+
+/**
+ * Import window: starts yesterday (Edmonton) so trips from yesterday's service that run
+ * past midnight survive an import, then covers today plus the next 6 days.
+ */
+export function importWindow(now: DateTime): { startDate: string; days: number } {
+  return { startDate: now.setZone(ZONE).minus({ days: 1 }).toISODate()!, days: 8 }
+}
 
 function field(v: unknown): string {
   if (v === null || v === undefined) return ''
@@ -96,7 +105,7 @@ async function main() {
         const entry = dir.files.find((e) => e.path === name)
         return entry ? entry.stream() : null
       },
-      { startDate: nowInEdmonton().toISODate()!, days: 7 },
+      importWindow(nowInEdmonton()),
     )
 
     const sql = postgres(url, { onnotice: () => {} })

@@ -73,7 +73,7 @@ select * from (
   join trips t on t.service_id = sd.service_id
   join routes r on r.route_id = t.route_id
   join stop_times so on so.trip_id = t.trip_id
-  join o on o.stop_id = so.stop_id and so.dep between days.now_s + o.walk_s and days.now_s + 5400
+  join o on o.stop_id = so.stop_id and so.dep between days.now_s + o.walk_s - 1800 and days.now_s + 5400
   join stop_times sd2 on sd2.trip_id = t.trip_id and sd2.stop_sequence > so.stop_sequence
   join d on d.stop_id = sd2.stop_id
   order by so.trip_id, days.service_date, (sd2.arr + d.walk_s) - (so.dep - o.walk_s), so.dep desc

@@ -39,6 +39,7 @@ describe('assembleDirectOptions', () => {
     const live: LiveIndex = {
       feedTimestamp: 0,
       trips: new Map([[c.tripId, {
+        startDate: DATE,
         stops: [{ stopSequence: 2, stopId: 'A', arrival: null, departure: nowEpoch - 60, delay: null }],
         vehicle: null,
       }]]),
@@ -47,6 +48,54 @@ describe('assembleDirectOptions', () => {
     // scheduled departure is in the future, so only the live time drops it
     expect(assembleDirectOptions([c], ctx(null))).toHaveLength(1)
     expect(assembleDirectOptions([c], ctx(live))).toEqual([])
+  })
+
+  it('keeps a bus scheduled before now + walk when it is predicted late enough to catch', () => {
+    // scheduled 12:01:00 departure; now is 12:00:00 and the walk is 150 s, so on schedule it is missed
+    const c = cand(1, { dep: base + 60 })
+    const late = nowEpoch + 600 + 400
+    const live: LiveIndex = {
+      feedTimestamp: 0,
+      trips: new Map([[c.tripId, {
+        startDate: DATE,
+        stops: [{ stopSequence: 2, stopId: 'A', arrival: null, departure: late, delay: null }],
+        vehicle: null,
+      }]]),
+      alerts: [],
+    }
+    const lateCtx = { ...ctx(live), nowEpoch: nowEpoch + 600 }
+    expect(assembleDirectOptions([c], { ...ctx(null), nowEpoch: nowEpoch + 600 })).toEqual([])
+    const [o] = assembleDirectOptions([c], lateCtx)
+    expect(o).toBeDefined()
+    expect(Date.parse(o.leaveAt) / 1000).toBe(late - 150)
+    expect(Date.parse(o.leaveAt) / 1000).toBeGreaterThanOrEqual(lateCtx.nowEpoch)
+  })
+
+  it('drops a bus whose live departure is too early to walk to', () => {
+    const c = cand(1, { dep: base - 600 + 200 }) // scheduled now + 200 s: catchable with a 150 s walk
+    const live: LiveIndex = {
+      feedTimestamp: 0,
+      trips: new Map([[c.tripId, {
+        startDate: DATE,
+        stops: [{ stopSequence: 2, stopId: 'A', arrival: null, departure: nowEpoch + 100, delay: null }],
+        vehicle: null,
+      }]]),
+      alerts: [],
+    }
+    expect(assembleDirectOptions([c], ctx(null))).toHaveLength(1)
+    expect(assembleDirectOptions([c], ctx(live))).toEqual([])
+  })
+
+  it('drops a scheduled-only bus that left 10 minutes ago', () => {
+    const c = cand(1, { dep: base - 600 - 600 })
+    expect(assembleDirectOptions([c], ctx(null))).toEqual([])
+  })
+
+  it('never shows a leave time in the past', () => {
+    const cands = Array.from({ length: 12 }, (_, i) => cand(i + 1, { dep: base - 1500 + i * 120 }))
+    for (const o of assembleDirectOptions(cands, ctx())) {
+      expect(Date.parse(o.leaveAt) / 1000).toBeGreaterThanOrEqual(nowEpoch)
+    }
   })
 
   it('keeps the best option per route/headsign, best first', () => {

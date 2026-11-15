@@ -66,13 +66,23 @@ describe('findDirectCandidates', () => {
     expect(c.map((x) => x.tripId)).toEqual(['A'])
   })
 
-  it('excludes trip A when the rider cannot walk to the stop in time', async () => {
+  it('keeps trip A when scheduled before now + walk, so a late bus can still be caught', async () => {
     const far = { lat: 53.5498, lon: -113.4909 } // ~600 m north of stop 1001
     const o = await findNearbyStops(db, far, 800)
     expect(o.map((x) => x.stopId)).toContain('1001')
     expect(o.find((x) => x.stopId === '1001')!.walkSeconds).toBeGreaterThanOrEqual(540)
     const d = await findNearbyStops(db, SOUTHGATE, 300)
-    expect(await findDirectCandidates(db, o, d, at('2026-11-14T18:09:00'))).toEqual([])
+    // 18:10 departure < 18:09 + walk; assembly decides with live data whether it is catchable
+    const c = await findDirectCandidates(db, o, d, at('2026-11-14T18:09:00'))
+    expect(c.map((x) => x.tripId)).toEqual(['A'])
+  })
+
+  it('allows up to 30 minutes of lateness, not more', async () => {
+    const o = await findNearbyStops(db, CHURCHILL, 300)
+    const d = await findNearbyStops(db, SOUTHGATE, 300)
+    // trip A departs 18:10; at 18:39 it may still be 29+ min late
+    expect((await findDirectCandidates(db, o, d, at('2026-11-14T18:39:00'))).map((x) => x.tripId)).toEqual(['A'])
+    expect(await findDirectCandidates(db, o, d, at('2026-11-14T18:41:00'))).toEqual([])
   })
 
   it('excludes trips departing more than 5400 s ahead', async () => {

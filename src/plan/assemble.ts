@@ -24,7 +24,8 @@ const iso = (epoch: number): string =>
 export function assembleDirectOptions(cands: Candidate[], ctx: AssembleCtx): Option[] {
   const timed = cands
     .map((c) => ({ c, rt: applyRealtime(c, ctx.live) }))
-    .filter((x) => x.rt.departEpoch >= ctx.nowEpoch)
+    // Keep only buses the rider can still walk to: live time when known, schedule otherwise.
+    .filter((x) => x.rt.departEpoch - x.c.board.walkSeconds >= ctx.nowEpoch)
     .map((x) => ({ ...x, finalArrive: x.rt.arriveEpoch + x.c.alight.walkSeconds }))
     .sort((a, b) => a.finalArrive - b.finalArrive)
 

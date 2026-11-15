@@ -128,4 +128,17 @@ describe('smoke (gtfs-mini)', () => {
     const s = SearchResponse.parse(await searchIndex(db, 'churchill'))
     expect(s.stops.map((x) => x.stopId)).toContain('1001')
   })
+
+  it('drops trip A at 18:09 from ~600 m away when it is not late (excluded in assembly)', async () => {
+    const db = await makeTestDb()
+    const { findNearbyStops, findDirectCandidates } = await import('@/src/plan/query')
+    const { loadShapes } = await import('@/src/plan/plan')
+    const far = { lat: 53.5498, lon: -113.4909 }
+    const base = { db, findNearbyStops, findDirectCandidates, loadShapes, getLiveIndex: async () => null }
+    const at = (iso: string) => () => DateTime.fromISO(iso, { zone: ZONE })
+    const missed = await planTrip(far, to, { ...base, now: at('2026-11-14T18:09:00') })
+    expect(PlanResponse.parse(missed).emptyReason).toBe('no_trips_soon')
+    const caught = await planTrip(far, to, { ...base, now: at('2026-11-14T17:59:00') })
+    expect(PlanResponse.parse(caught).options.map((o) => o.legs.find((l) => l.mode !== 'walk')!.tripId)).toEqual(['A'])
+  })
 })
