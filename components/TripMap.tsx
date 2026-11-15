@@ -2,7 +2,6 @@
 
 import { useEffect, useRef } from 'react'
 import * as maplibregl from 'maplibre-gl'
-import 'maplibre-gl/dist/maplibre-gl.css'
 import type { Option, Vehicle } from '@/src/contract/schema'
 import {
   buildLineFeatures,
@@ -13,7 +12,7 @@ import {
   OPTION_COLORS,
 } from '@/src/map/lines'
 import { OCCUPANCY_TEXT } from '@/components/format'
-import { tomtomRasterUrl, tomtomCopyrightUrl, attributionOptions } from '@/src/tomtom/tiles'
+import { useMaplibre } from '@/src/map/useMaplibre'
 
 type Props = {
   options: Option[]
@@ -45,7 +44,6 @@ function selectedTrips(options: Option[], selectedId: string | null) {
   return { trips, railLabels }
 }
 const RIDE_FILTER: maplibregl.FilterSpecification = ['==', ['get', 'kind'], 'ride']
-const FALLBACK_ATTRIBUTION = '© TomTom'
 const FIT = { padding: 40, animate: false, maxZoom: 16 } as const
 
 function fitRoute(map: maplibregl.Map, options: Option[]) {
@@ -80,14 +78,6 @@ function placeTag(text: string, role: 'start' | 'destination') {
   return el
 }
 
-function styleFor(key: string): maplibregl.StyleSpecification {
-  return {
-    version: 8,
-    sources: { base: { type: 'raster', tiles: [tomtomRasterUrl(key)], tileSize: 256, maxzoom: 22 } },
-    layers: [{ id: 'base', type: 'raster', source: 'base' }],
-  }
-}
-
 export default function TripMap({
   options,
   selectedId,
@@ -99,8 +89,7 @@ export default function TripMap({
 }: Props) {
   const key = process.env.NEXT_PUBLIC_TOMTOM_KEY
   const container = useRef<HTMLDivElement>(null)
-  const mapRef = useRef<maplibregl.Map | null>(null)
-  const loadedRef = useRef(false)
+  const map = useMaplibre(container)
   const markersRef = useRef<maplibregl.Marker[]>([])
   const endsRef = useRef<maplibregl.Marker[]>([])
   const onSelectRef = useRef(onSelect)
@@ -111,36 +100,10 @@ export default function TripMap({
     latest.current = { options, selectedId, showWalking, vehicles }
   })
 
-  // Create the map once.
+  // Add the sources, layers and handlers once the map has loaded.
   useEffect(() => {
-    if (!key || !container.current) return
-    // The bundled chunk's default worker URL 404s, so GeoJSON lines are never drawn.
-    maplibregl.setWorkerUrl?.('/maplibre-gl-worker.js')
-    const map = new maplibregl.Map({
-      container: container.current,
-      style: styleFor(key),
-      attributionControl: false,
-      center: [-113.4909, 53.5444],
-      zoom: 11,
-    })
-    mapRef.current = map
-    let attribution: maplibregl.AttributionControl | null = null
-    const setAttribution = (text: string) => {
-      if (attribution) map.removeControl(attribution)
-      attribution = new maplibregl.AttributionControl(attributionOptions(text))
-      map.addControl(attribution, 'bottom-right')
-    }
-    setAttribution(FALLBACK_ATTRIBUTION)
-
-    let cancelled = false
-    fetch(tomtomCopyrightUrl(key))
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((j: { copyrightsCaption?: string }) => {
-        if (!cancelled && j.copyrightsCaption) setAttribution(j.copyrightsCaption)
-      })
-      .catch(() => {})
-
-    map.on('load', () => {
+    if (!map) return
+    {
       const { options, selectedId, showWalking } = latest.current
       map.addSource(SOURCE, { type: 'geojson', data: buildLineFeatures(options, selectedId, showWalking) })
       // Literal widths. A data-driven width was collapsing the stroke to a hairline on the basemap.
@@ -211,52 +174,40 @@ export default function TripMap({
       })
       map.on('mouseenter', VEHICLE_LAYER, () => (map.getCanvas().style.cursor = 'pointer'))
       map.on('mouseleave', VEHICLE_LAYER, () => (map.getCanvas().style.cursor = ''))
-      loadedRef.current = true
       // Style load resets the camera to the constructor center and zoom.
       // Fit after that, or the route stays a short stroke on a city-wide map.
       fitRoute(map, latest.current.options)
-    })
-
+    }
     return () => {
-      cancelled = true
-      loadedRef.current = false
       markersRef.current.forEach((m) => m.remove())
       markersRef.current = []
       endsRef.current.forEach((m) => m.remove())
       endsRef.current = []
-      map.remove()
-      mapRef.current = null
     }
-  }, [key])
+  }, [map])
 
   // Fit again when a later search replaces the options. Before 'load', this is a no-op.
   useEffect(() => {
-    const map = mapRef.current
-    if (!map || !loadedRef.current) return
+    if (!map) return
     fitRoute(map, options)
-  }, [options, key])
+  }, [options, map])
 
   // Line data follows options/selection/walking.
   useEffect(() => {
-    const map = mapRef.current
     if (!map) return
-    // Before 'load', the load handler reads the latest props itself.
-    if (!loadedRef.current) return
     const src = map.getSource(SOURCE) as maplibregl.GeoJSONSource | undefined
     src?.setData(buildLineFeatures(options, selectedId, showWalking))
-  }, [options, selectedId, showWalking, key])
+  }, [options, selectedId, showWalking, map])
 
   // Vehicle dots follow the live poll and the selection (which sets their colour).
   useEffect(() => {
-    const map = mapRef.current
-    if (!map || !loadedRef.current) return
+    if (!map) return
     const src = map.getSource(VEHICLE_SOURCE) as maplibregl.GeoJSONSource | undefined
     src?.setData(buildVehicleFeatures(vehicles, selectedTrips(options, selectedId).trips))
-  }, [vehicles, options, selectedId, key])
+  }, [vehicles, options, selectedId, map])
 
   // Label markers rebuilt when options change; selection only restyles them.
   useEffect(() => {
-    const map = mapRef.current
     if (!map) return
     markersRef.current.forEach((m) => m.remove())
     markersRef.current = labelPoints(options).map((p) => {
@@ -272,11 +223,10 @@ export default function TripMap({
       })
       return new maplibregl.Marker({ element: el, offset: [0, p.offsetY] }).setLngLat(p.lngLat).addTo(map)
     })
-  }, [options, key])
+  }, [options, map])
 
   // Start and destination sit on the ends of the selected trip. The route pill is only the middle label.
   useEffect(() => {
-    const map = mapRef.current
     if (!map) return
     endsRef.current.forEach((m) => m.remove())
     const option = options.find((o) => o.id === selectedId) ?? options[0]
@@ -285,7 +235,7 @@ export default function TripMap({
       const el = placeTag(text, p.role)
       return new maplibregl.Marker({ element: el, anchor: 'left', offset: [4, 0] }).setLngLat(p.lngLat).addTo(map)
     })
-  }, [options, selectedId, fromLabel, toLabel, key])
+  }, [options, selectedId, fromLabel, toLabel, map])
 
   useEffect(() => {
     for (const m of markersRef.current) {
@@ -296,7 +246,7 @@ export default function TripMap({
       el.style.fontSize = on ? '14px' : '12px'
       el.style.borderWidth = on ? '3px' : '2px'
     }
-  }, [selectedId, options, key])
+  }, [selectedId, options, map])
 
   if (!key) {
     return (
