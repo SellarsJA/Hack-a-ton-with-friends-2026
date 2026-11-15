@@ -31,6 +31,21 @@ describe('accuracyStats', () => {
     expect(s.measured.byRealtime.scheduled).toBeNull()
   })
 
+  it('counts only the earliest prediction per trip-stop', async () => {
+    const db = await makeTestDb()
+    const ins = (at: number, latest: number) =>
+      db.query(
+        `insert into predictions (trip_id, service_date, stop_id, stop_sequence, scheduled_epoch, predicted_epoch, predicted_at, realtime, latest_epoch, final)
+         values ('T','2026-11-14','S',1,0,10000,$1,true,$2,true)`,
+        [at, latest],
+      )
+    await ins(1, 10000 + 60) // earlier: 1 min error
+    await ins(2, 10000 + 600) // later repeat: ignored
+    const s = await accuracyStats(db)
+    expect(s.measured.count).toBe(1)
+    expect(s.measured.medianErrorMinutes).toBe(1)
+  })
+
   it('splits realtime vs scheduled', async () => {
     const db = await makeTestDb()
     await seedPred(db, 1, 1, { realtime: true })

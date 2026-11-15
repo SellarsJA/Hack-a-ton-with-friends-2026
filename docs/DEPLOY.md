@@ -107,19 +107,32 @@ Ride feedback adds the `profiles`, `feedback` and `predictions` tables. Run by h
 
 **Order matters: migrate production *before* the tier 3 code deploys.** `npm run db:migrate` is the same script as `db:schema`: it applies `db/schema.sql` and then `db/feedback.sql`. Every statement is idempotent, and the GTFS import never truncates the feedback tables.
 
-- [ ] **1. Migrate production, twice.** The second run must be a no-op with no errors.
+- [ ] **1. Migrate production, twice.** Run the command, then run the same command again. The second run must be a no-op with no errors.
   - bash: `DATABASE_URL='<prod>' npm run db:migrate`
   - PowerShell: `$env:DATABASE_URL="<prod>"; npm run db:migrate`
-  - Smoke check in the Neon SQL editor; all three must succeed: `select count(*) from profiles; select count(*) from feedback; select count(*) from predictions;`
+  - Run it a second time (same command again):
+    - bash: `DATABASE_URL='<prod>' npm run db:migrate`
+    - PowerShell: `$env:DATABASE_URL="<prod>"; npm run db:migrate`
+  - Smoke check in the Neon SQL editor. Run these one at a time, because the editor shows only the last result; all three must succeed:
+    ```sql
+    select count(*) from profiles;
+    ```
+    ```sql
+    select count(*) from feedback;
+    ```
+    ```sql
+    select count(*) from predictions;
+    ```
 - [ ] **2. Deploy.** `npm test` passes, push, and the Vercel deploy succeeds.
 - [ ] **3. Open the Vercel https URL on the phone**, not a LAN `http://` address. The `rid` cookie is `Secure`, so the browser does not store it over plain http on a LAN IP.
 - [ ] **4. Plan a trip departing within 2 minutes.** The button `I'm on bus <label>` appears on the selected option. Leave the results page open for the next check.
-- [ ] **5. Submit feedback.** Stars 4, time slider at 5, `Too full`. The page shows `Thanks! Your feedback is saved. You can change it until the end of the day.`
-- [ ] **6. Resubmit.** Reopen the same link, change stars to 3 and resubmit. In Neon, `select count(*) from feedback;` is unchanged.
+- [ ] **5. Submit feedback.** Stars 4, time slider at 5, `Too full`. The page shows `Thanks! Your feedback is saved. You can change it until the end of the day.` In Neon, run `select count(*) from feedback;` and note the count as your baseline.
+- [ ] **6. Resubmit.** Reopen the same link. The form starts blank, so change stars to 3, reselect `Too full`, and resubmit. In Neon, `select count(*) from feedback;` still equals the baseline from step 5.
+  - A resubmit replaces every answer, so re-enter all of them; anything left blank is stored as empty.
 - [ ] **7. Check the summary.** Back on results, the card shows `★ 3.0 (1) · 1 too full this month`.
 - [ ] **8. Clear site data and reload.** A new `rid` cookie is set, and the previous rating still counts in the summary.
 - [ ] **9. Neon smoke check of tracking.** About 1 minute after planning (results page still open), run `select count(*) from predictions where latest_epoch is not null;`. Expect 1 or more while a live trip is in progress. Neon array parameters were only tested on PGlite. If it stays 0 and the Vercel logs show `[accuracy]` warnings, that is the cause.
-- [ ] **10. After 30 minutes, open `/stats`.** `/stats` is not linked from the app; open it by URL. It shows the headings `What riders told us` and `What we measured`, with `count ≥ 1` under `What we measured`.
+- [ ] **10. After 30 minutes, open `/stats`.** Rows count once their stop has passed in the feed, or once their trip has dropped out of the feed and the scheduled time is more than 30 minutes past. `/stats` is not linked from the app; open it by URL. It shows the headings `What riders told us` and `What we measured`, with `count ≥ 1` under `What we measured`.
   - Measured accuracy is skipped when `LIVE_SOURCE=snapshot`, so `/stats` stays empty in snapshot demos by design. Production must not set `LIVE_SOURCE=snapshot` if you want measured stats.
 - [ ] **11. Visual checks on the phone.** The `/ride` page at a narrow width has no horizontal scroll. The slider thumb is large and easy to grab, the focus outline is visible, and it works in both light and dark mode.
 - [ ] **12. Re-import.** Run the import against production once more, and confirm the section 1, step 6 summary is unchanged.

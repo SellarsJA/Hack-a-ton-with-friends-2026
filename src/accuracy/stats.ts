@@ -38,8 +38,10 @@ export async function accuracyStats(db: Db = getDb()): Promise<AccuracyStats> {
             (avg((e <= 2)::int) * 100)::float8 as within,
             (percentile_cont(0.5) within group (order by e) filter (where realtime))::float8 as live,
             (percentile_cont(0.5) within group (order by e) filter (where not realtime))::float8 as sched
-       from (select abs(predicted_epoch - latest_epoch)::float8 / 60 as e, realtime
-               from predictions where final and latest_epoch is not null) t`,
+       from (select distinct on (trip_id, service_date, stop_sequence)
+                    abs(predicted_epoch - latest_epoch)::float8 / 60 as e, realtime
+               from predictions where final and latest_epoch is not null
+              order by trip_id, service_date, stop_sequence, predicted_at) t`,
   )
   const count = Number(m?.n ?? 0)
   return {

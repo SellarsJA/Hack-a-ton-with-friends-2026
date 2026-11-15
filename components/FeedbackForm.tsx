@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import type { Accuracy, FeedbackRequest, Issue, RideLink } from '@/src/contract/schema'
 import Slider from './Slider'
+import { invalidateVehicleSummary } from './VehicleSummary'
 
 type Key = keyof Accuracy
 const ISSUES: { value: Issue | 'none'; label: string }[] = [
@@ -13,7 +14,7 @@ const ISSUES: { value: Issue | 'none'; label: string }[] = [
   { value: 'too_full', label: 'Too full' },
 ]
 
-type Status = 'idle' | 'sending' | 'done' | 'invalid' | 'empty' | 'network'
+type Status = 'idle' | 'sending' | 'done' | 'invalid' | 'failed' | 'empty' | 'network'
 
 export default function FeedbackForm({ ride }: { ride: RideLink }) {
   const [stars, setStars] = useState<number | undefined>()
@@ -54,7 +55,14 @@ export default function FeedbackForm({ ride }: { ride: RideLink }) {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
       })
-      setStatus(res.ok ? 'done' : 'invalid')
+      if (res.ok) {
+        if (ride.vehicleLabel !== null) invalidateVehicleSummary(ride.vehicleLabel)
+        setStatus('done')
+      } else {
+        let code: unknown
+        if (res.status === 400) code = await res.json().then((j: { error?: unknown }) => j?.error).catch(() => undefined)
+        setStatus(res.status === 400 && code === 'invalid' ? 'invalid' : 'failed')
+      }
     } catch {
       setStatus('network')
     }
@@ -137,6 +145,7 @@ export default function FeedbackForm({ ride }: { ride: RideLink }) {
       {status === 'invalid' && (
         <p role="alert">Something&apos;s not right with that answer. Please check and try again.</p>
       )}
+      {status === 'failed' && <p role="alert">Couldn&apos;t save your feedback. Please try again in a moment.</p>}
       {status === 'network' && <p role="alert">Couldn&apos;t send. Check your connection and try again.</p>}
 
       <button

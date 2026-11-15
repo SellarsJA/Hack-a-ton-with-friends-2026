@@ -5,6 +5,8 @@ import fixture from '@/fixtures/plan.json'
 import { PlanResponse, type RideLink } from '@/src/contract/schema'
 import OnBoardButton from '@/components/OnBoardButton'
 import FeedbackForm from '@/components/FeedbackForm'
+import VehicleSummary, { __resetVehicleSummaryCacheForTests } from '@/components/VehicleSummary'
+import vehicleFixture from '@/fixtures/vehicle-summary.json'
 
 afterEach(() => {
   cleanup()
@@ -109,7 +111,7 @@ describe('FeedbackForm', () => {
     expect(input.getAttribute('aria-valuetext')).toBe('3 of 5')
   })
   it('shows 400 and network errors', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 400, json: async () => ({}) }))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 400, json: async () => ({ error: 'invalid' }) }))
     render(<FeedbackForm ride={ride} />)
     await userEvent.click(screen.getByRole('radio', { name: 'Safety' }))
     await userEvent.click(screen.getByRole('button', { name: 'Send feedback' }))
@@ -117,5 +119,35 @@ describe('FeedbackForm', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('x')))
     await userEvent.click(screen.getByRole('button', { name: 'Send feedback' }))
     expect(await screen.findByText(/Couldn't send/)).toBeTruthy()
+  })
+  it('shows the generic save error for 500 and 400 no_profile', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500, json: async () => ({ error: 'server_error' }) }))
+    render(<FeedbackForm ride={ride} />)
+    await userEvent.click(screen.getByRole('radio', { name: 'Safety' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Send feedback' }))
+    expect(await screen.findByText("Couldn't save your feedback. Please try again in a moment.")).toBeTruthy()
+    expect(screen.queryByText(/Something's not right/)).toBeNull()
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 400, json: async () => ({ error: 'no_profile' }) }))
+    await userEvent.click(screen.getByRole('button', { name: 'Send feedback' }))
+    await waitFor(() => expect(screen.queryByText(/Something's not right/)).toBeNull())
+    expect(screen.getByText(/Couldn't save your feedback/)).toBeTruthy()
+  })
+  it('refetches the vehicle summary after a successful submit', async () => {
+    const summary = { ...vehicleFixture, label: '4012' }
+    const f = vi.fn((url: string) =>
+      Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(url === '/api/feedback' ? { ok: true } : summary) }),
+    )
+    vi.stubGlobal('fetch', f)
+    __resetVehicleSummaryCacheForTests()
+    const r = { ...ride, vehicleLabel: '4012' }
+    const first = render(<VehicleSummary label="4012" />)
+    await waitFor(() => expect(f).toHaveBeenCalledTimes(1))
+    first.unmount()
+    render(<FeedbackForm ride={r} />)
+    await userEvent.click(screen.getByRole('radio', { name: 'Safety' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Send feedback' }))
+    await screen.findByText(/Thanks!/)
+    render(<VehicleSummary label="4012" />)
+    await waitFor(() => expect(f.mock.calls.filter((c) => String(c[0]).startsWith('/api/vehicles/'))).toHaveLength(2))
   })
 })

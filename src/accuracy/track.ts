@@ -2,6 +2,7 @@ import { getDb, type Db } from '@/src/db/client'
 import type { LiveIndex } from '@/src/live/decode'
 
 const STALE_SECONDS = 6 * 3600
+const ABSENT_SECONDS = 1800
 
 let lastTrackedFeedTimestamp: number | null = null
 
@@ -25,10 +26,12 @@ export async function trackActuals(live: LiveIndex, nowEpoch: number, db: Db = g
     const open = await db.query<OpenRow>(
       'select trip_id, service_date::text as service_date, stop_id, stop_sequence::int as stop_sequence from predictions where not final',
     )
+    const presentKeys: string[] = []
     const keyed = new Map<string, { latest: number; fin: boolean; row: OpenRow }>()
     for (const row of open) {
       const trip = live.trips.get(row.trip_id)
       if (!trip || (trip.startDate !== null && trip.startDate !== row.service_date)) continue
+      presentKeys.push(`${row.trip_id}|${row.service_date}`)
       const stop =
         trip.stops.find((s) => s.stopSequence === Number(row.stop_sequence)) ??
         trip.stops.find((s) => s.stopId === row.stop_id)
@@ -61,7 +64,14 @@ export async function trackActuals(live: LiveIndex, nowEpoch: number, db: Db = g
         ],
       )
     }
-    await db.query('update predictions set final = true where not final and predicted_at < $1', [now - STALE_SECONDS])
+    // Also finalise rows whose trip has left the feed and whose scheduled time is over 30 minutes past.
+    await db.query(
+      `update predictions set final = true
+        where not final
+          and (predicted_at < $1
+               or (scheduled_epoch < $2 and (trip_id || '|' || service_date::text) <> all($3::text[])))`,
+      [now - STALE_SECONDS, now - ABSENT_SECONDS, presentKeys],
+    )
   } catch (err) {
     lastTrackedFeedTimestamp = null
     throw err

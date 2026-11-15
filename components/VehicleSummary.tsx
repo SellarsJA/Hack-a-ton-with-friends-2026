@@ -11,10 +11,15 @@ export function __resetVehicleSummaryCacheForTests() {
   cache.clear()
 }
 
+/** Forget a label's cached summary so the next mount refetches (call after the rider submits feedback). */
+export function invalidateVehicleSummary(label: string) {
+  cache.delete(label)
+}
+
 function load(label: string): Promise<Summary | null> {
   let p = cache.get(label)
   if (!p) {
-    p = fetch(`/api/vehicles/${encodeURIComponent(label)}`)
+    p = fetch(`/api/vehicles/${encodeURIComponent(label)}`, { cache: 'no-cache' })
       .then(async (res) => {
         if (!res.ok) return null
         const parsed = VehicleSummarySchema.safeParse(await res.json())

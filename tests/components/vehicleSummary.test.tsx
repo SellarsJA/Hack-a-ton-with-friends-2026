@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { render, screen, cleanup, waitFor } from '@testing-library/react'
 import fixture from '@/fixtures/vehicle-summary.json'
-import VehicleSummary, { __resetVehicleSummaryCacheForTests } from '@/components/VehicleSummary'
+import VehicleSummary, { invalidateVehicleSummary, __resetVehicleSummaryCacheForTests } from '@/components/VehicleSummary'
 
 const okJson = (body: unknown, ok = true) => Promise.resolve({ ok, json: () => Promise.resolve(body) })
 
@@ -56,6 +56,17 @@ describe('VehicleSummary', () => {
     await waitFor(() => expect(screen.getAllByText(/★ 4.2/)).toHaveLength(2))
     expect(f).toHaveBeenCalledTimes(1)
   })
+  it('refetches after invalidation, with no-cache', async () => {
+    const f = vi.fn(() => okJson(fixture))
+    vi.stubGlobal('fetch', f)
+    const { unmount } = render(<VehicleSummary label="4012" />)
+    await waitFor(() => expect(f).toHaveBeenCalledTimes(1))
+    expect(f).toHaveBeenCalledWith('/api/vehicles/4012', { cache: 'no-cache' })
+    unmount()
+    invalidateVehicleSummary('4012')
+    render(<VehicleSummary label="4012" />)
+    await waitFor(() => expect(f).toHaveBeenCalledTimes(2))
+  })
   it('null label makes no fetch and URL-encodes labels', async () => {
     const f = vi.fn(() => okJson(fixture))
     vi.stubGlobal('fetch', f)
@@ -63,6 +74,6 @@ describe('VehicleSummary', () => {
     expect(container.textContent).toBe('')
     expect(f).not.toHaveBeenCalled()
     render(<VehicleSummary label="a/b" />)
-    await waitFor(() => expect(f).toHaveBeenCalledWith('/api/vehicles/a%2Fb'))
+    await waitFor(() => expect(f).toHaveBeenCalledWith('/api/vehicles/a%2Fb', { cache: 'no-cache' }))
   })
 })

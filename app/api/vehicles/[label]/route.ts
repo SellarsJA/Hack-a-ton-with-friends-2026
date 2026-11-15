@@ -10,7 +10,7 @@ export async function GET(_request: NextRequest, ctx: { params: Promise<{ label:
 
   try {
     const body = await vehicleSummary(label)
-    return NextResponse.json(body, { headers: { 'Cache-Control': 'public, max-age=60' } })
+    return NextResponse.json(body, { headers: { 'Cache-Control': 'private, max-age=60' } })
   } catch (err) {
     console.error('vehicle summary failed', err)
     return NextResponse.json({ error: 'server_error' }, { status: 500, headers: noStore })

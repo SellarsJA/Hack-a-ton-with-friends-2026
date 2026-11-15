@@ -113,7 +113,7 @@ describe('GET /api/vehicles/:label', () => {
     vehicleSummary.mockResolvedValue(summary)
     const res = await vehicle('V1')
     expect(res.status).toBe(200)
-    expect(res.headers.get('cache-control')).toBe('public, max-age=60')
+    expect(res.headers.get('cache-control')).toBe('private, max-age=60')
     expect(await res.json()).toEqual(summary)
     expect(vehicleSummary.mock.calls[0][0]).toBe('V1')
   })

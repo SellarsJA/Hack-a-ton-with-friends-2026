@@ -22,11 +22,11 @@ function counting(db: Db) {
   return { db: wrapped, updates: () => calls.filter((c) => /update\s+predictions/i.test(c)).length }
 }
 
-async function seed(db: Db, o: { trip?: string; seq?: number; stop?: string; predictedAt?: number; pred?: number }) {
+async function seed(db: Db, o: { trip?: string; seq?: number; stop?: string; predictedAt?: number; pred?: number; sched?: number }) {
   await db.query(
     `insert into predictions (trip_id, service_date, stop_id, stop_sequence, scheduled_epoch, predicted_epoch, predicted_at, realtime)
      values ($1,$2,$3,$4,$5,$6,$7,true)`,
-    [o.trip ?? 'T1', D, o.stop ?? 'S1', o.seq ?? 3, 1000, o.pred ?? 5000, o.predictedAt ?? NOW - 60],
+    [o.trip ?? 'T1', D, o.stop ?? 'S1', o.seq ?? 3, o.sched ?? NOW + 600, o.pred ?? 5000, o.predictedAt ?? NOW - 60],
   )
 }
 const row = async (db: Db) =>
@@ -91,6 +91,20 @@ describe('trackActuals', () => {
     await db.query('update predictions set latest_epoch = 4000')
     await trackActuals(live(1, []), NOW, db)
     expect(await row(db)).toMatchObject({ final: true, latest_epoch: '4000' })
+  })
+
+  it('finalises rows of a trip absent from the feed once 30 minutes past schedule', async () => {
+    const db = await makeTestDb()
+    await seed(db, { trip: 'OLD', sched: NOW - 31 * 60 })
+    await seed(db, { trip: 'NEW', sched: NOW - 29 * 60 })
+    await db.query("update predictions set latest_epoch = 4000 where trip_id = 'OLD'")
+    await trackActuals(live(1, []), NOW, db)
+    const rows = await db.query<{ trip_id: string; final: boolean; latest_epoch: string | null }>(
+      'select trip_id, final, latest_epoch::text from predictions order by trip_id')
+    expect(rows).toEqual([
+      { trip_id: 'NEW', final: false, latest_epoch: null },
+      { trip_id: 'OLD', final: true, latest_epoch: '4000' },
+    ])
   })
 
   it('makes one update for a repeated feedTimestamp', async () => {
