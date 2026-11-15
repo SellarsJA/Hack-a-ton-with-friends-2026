@@ -13,7 +13,7 @@ export type TripLive = {
   /** Service day of this trip instance (from trip.start_date), YYYY-MM-DD; null when the feed omits it. */
   startDate: string | null
   stops: StopLive[]
-  vehicle: { label: string; lat: number; lon: number; occupancy: Occupancy | null } | null
+  vehicle: { label: string; lat: number; lon: number; occupancy: Occupancy | null; routeId?: string | null } | null
 }
 
 export type ActivePeriod = { start: number | null; end: number | null }
@@ -130,11 +130,16 @@ export function buildLiveIndex(
     if (!v || !tripId) continue
     const label = v.vehicle?.label || v.vehicle?.id || ''
     const occ = num(field(v, 'occupancyStatus'))
-    ensure(tripId, isoDate(v.trip?.startDate)).vehicle = {
+    const t = ensure(tripId, isoDate(v.trip?.startDate))
+    // No position on the wire means no vehicle to draw; never invent 0,0.
+    if (!field(v, 'position') || v.position?.latitude == null || v.position?.longitude == null) continue
+    const routeId = field(v.trip, 'routeId')
+    t.vehicle = {
       label,
-      lat: v.position?.latitude ?? 0,
-      lon: v.position?.longitude ?? 0,
+      lat: v.position.latitude,
+      lon: v.position.longitude,
       occupancy: occ === null ? null : (OCCUPANCY[occ] ?? null),
+      routeId: typeof routeId === 'string' && routeId !== '' ? routeId : null,
     }
   }
 

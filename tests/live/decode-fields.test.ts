@@ -29,6 +29,16 @@ function vehicles(extra: object) {
 }
 
 describe('absent protobuf fields', () => {
+  it('vehicle without a position decodes to vehicle null, never 0,0', () => {
+    const buf = enc([{ id: 'v1', vehicle: { trip: { tripId: 'T1' }, vehicle: { id: '1', label: '4393' } } }])
+    const i = buildLiveIndex({ vehicles: buf, tripUpdates: empty, alerts: empty })
+    expect(i.trips.get('T1')!.vehicle).toBeNull()
+  })
+  it('vehicle carries routeId from trip.route_id only when present', () => {
+    const withRoute = vehicles({ trip: { tripId: 'T1', routeId: 'R9' } })
+    expect(buildLiveIndex({ vehicles: withRoute, tripUpdates: empty, alerts: empty }).trips.get('T1')!.vehicle!.routeId).toBe('R9')
+    expect(buildLiveIndex({ vehicles: vehicles({}), tripUpdates: empty, alerts: empty }).trips.get('T1')!.vehicle!.routeId).toBeNull()
+  })
   it('vehicle without occupancy decodes to null', () => {
     const i = buildLiveIndex({ vehicles: vehicles({}), tripUpdates: empty, alerts: empty })
     expect(i.trips.get('T1')!.vehicle!.occupancy).toBeNull()

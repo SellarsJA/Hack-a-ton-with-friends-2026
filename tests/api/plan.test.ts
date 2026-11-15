@@ -86,6 +86,22 @@ describe('planTrip', () => {
     expect(r.liveDataAgeSeconds).toBe(30)
   })
 
+  it('returns route vehicles and each transit leg vehiclePosition', async () => {
+    const live: LiveIndex = {
+      feedTimestamp: now.toSeconds() - 5,
+      alerts: [],
+      trips: new Map([
+        ['t1', { startDate: '2026-11-14', stops: [], vehicle: { label: '4393', lat: 53.5, lon: -113.5, occupancy: null, routeId: 'R9' } }],
+        ['other', { startDate: '2026-11-14', stops: [], vehicle: { label: '9', lat: 1, lon: 2, occupancy: null, routeId: 'R77' } }],
+      ]),
+    }
+    const r = PlanResponse.parse(await planTrip(from, to, deps({ getLiveIndex: async () => live })))
+    expect(r.vehicles.map((v) => v.label)).toEqual(['4393'])
+    for (const l of r.options[0].legs) {
+      if (l.mode !== 'walk') expect(l.vehiclePosition).toEqual({ lat: 53.5, lon: -113.5 })
+    }
+  })
+
   it('skips null shape ids when loading shapes', async () => {
     const loadShapes = vi.fn(async () => new Map<string, [number, number][]>())
     await planTrip(from, to, deps({ loadShapes }))

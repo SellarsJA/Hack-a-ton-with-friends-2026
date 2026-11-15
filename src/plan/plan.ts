@@ -1,10 +1,12 @@
 import type { DateTime } from 'luxon'
-import type { LatLng, PlanResponse } from '@/src/contract/schema'
+import type { LatLng, Leg, PlanResponse } from '@/src/contract/schema'
 import { getDb, type Db } from '@/src/db/client'
 import { getLiveIndex } from '@/src/live/cache'
 import type { LiveIndex } from '@/src/live/decode'
 import { assembleDirectOptions, assembleTransferOptions, mergeAndRank } from '@/src/plan/assemble'
+import { decodeLiveKey } from '@/src/plan/liveKey'
 import { nextDepartures } from '@/src/plan/departures'
+import { dbVehicleLookups, vehiclesForRoutes, type RouteNamesFn, type TripRouteFn } from '@/src/plan/vehicles'
 import { findDirectCandidates, findNearbyStops } from '@/src/plan/query'
 import { findTransferCandidates } from '@/src/plan/queryTransfer'
 import { activeServiceDays, nowInEdmonton } from '@/src/time/edmonton'
@@ -20,6 +22,9 @@ export type PlanDeps = {
   loadShapes: (db: Db, ids: string[]) => Promise<Shapes>
   getLiveIndex: () => Promise<LiveIndex | null>
   now: () => DateTime
+  /** Vehicle lookups; defaults to queries on `db`. */
+  tripRoute?: TripRouteFn
+  routeNames?: RouteNamesFn
 }
 
 export async function loadShapes(db: Db, ids: string[]): Promise<Shapes> {
@@ -48,6 +53,12 @@ export function defaultDeps(): PlanDeps {
     getLiveIndex: () => getLiveIndex(),
     now: nowInEdmonton,
   }
+}
+
+function vehicleAt(live: LiveIndex | null, tripId: string, serviceDate: string): { lat: number; lon: number } | null {
+  const t = live?.trips.get(tripId)
+  if (!t?.vehicle || (t.startDate != null && t.startDate !== serviceDate)) return null
+  return { lat: t.vehicle.lat, lon: t.vehicle.lon }
 }
 
 export async function planTrip(
@@ -92,7 +103,21 @@ export async function planTrip(
     ...ctx,
     nextDepartures: (args) => deps.nextDepartures(deps.db, args),
   })
-  const options = mergeAndRank(directOptions, transferOptions)
-  if (options.length === 0) return empty('no_trips_soon')
-  return { generatedAt, liveDataAgeSeconds, emptyReason: null, options, vehicles: [] }
+  const ranked = mergeAndRank(directOptions, transferOptions)
+  if (ranked.length === 0) return empty('no_trips_soon')
+  const options = ranked.map((o) => ({
+    ...o,
+    legs: o.legs.map((l): Leg => (l.mode === 'walk' ? l : { ...l, vehiclePosition: vehicleAt(live, l.tripId, l.serviceDate) })),
+  }))
+  const routeIds = [
+    ...new Set(options.flatMap((o) => decodeLiveKey(o.liveKey)?.legs.map((l) => l.r) ?? [])),
+  ]
+  const lookups = dbVehicleLookups(deps.db)
+  const vehicles = await vehiclesForRoutes(
+    routeIds,
+    live,
+    deps.tripRoute ?? lookups.tripRoute,
+    deps.routeNames ?? lookups.routeNames,
+  ).catch(() => [])
+  return { generatedAt, liveDataAgeSeconds, emptyReason: null, options, vehicles }
 }
