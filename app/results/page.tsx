@@ -9,6 +9,7 @@ import { parseLatLng } from '@/src/geo/geo'
 import { hasLeft, mergeLive, useLiveOption } from '@/src/hooks/useLiveOption'
 import LiveBanner from '@/components/LiveBanner'
 import OptionList from '@/components/OptionList'
+import RateSheet from '@/components/RateSheet'
 
 const TripMap = dynamic(() => import('@/components/TripMap'), { ssr: false })
 
@@ -32,8 +33,15 @@ function Results() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [showWalking, setShowWalking] = useState(true)
   const [attempt, setAttempt] = useState(0)
+  // Trip mode: the rider picked an option to take, so only it is shown, with a rate bar.
+  const [riding, setRiding] = useState(false)
+  const [rating, setRating] = useState(false)
+  const [reviewsVersion, setReviewsVersion] = useState(0)
+  const closeRating = useCallback(() => setRating(false), [])
+  const savedRating = useCallback(() => setReviewsVersion((v) => v + 1), [])
 
   const retry = useCallback(() => {
+    setRiding(false)
     setState({ kind: 'loading' })
     setAttempt((n) => n + 1)
   }, [])
@@ -111,7 +119,7 @@ function Results() {
       <div className="h-[45%] shrink-0 bg-zinc-200 dark:bg-zinc-800">
         {state.kind === 'ok' && state.plan.options.length > 0 && (
           <TripMap
-            options={state.plan.options}
+            options={riding && selected ? [selected] : state.plan.options}
             selectedId={selectedId}
             showWalking={showWalking}
             onSelect={setSelectedId}
@@ -143,9 +151,19 @@ function Results() {
             ) : (
               <>
                 <div className="flex min-h-12 items-center justify-between gap-3">
-                  <span className="text-sm text-zinc-600 dark:text-zinc-400">
-                    {`${state.plan.options.length} ${state.plan.options.length === 1 ? 'option' : 'options'}`}
-                  </span>
+                  {riding ? (
+                    <button
+                      type="button"
+                      onClick={() => setRiding(false)}
+                      className="min-h-11 rounded-full text-sm font-semibold text-blue-700 dark:text-blue-300"
+                    >
+                      ← All options
+                    </button>
+                  ) : (
+                    <span className="text-sm text-zinc-600 dark:text-zinc-400">
+                      {`${state.plan.options.length} ${state.plan.options.length === 1 ? 'option' : 'options'}`}
+                    </span>
+                  )}
                   <label className="flex min-h-12 items-center gap-2 text-sm">
                     <input
                       type="checkbox"
@@ -157,18 +175,41 @@ function Results() {
                   </label>
                 </div>
                 <OptionList
-                  options={displayed}
+                  options={riding && mergedSelected ? [mergedSelected] : displayed}
                   selectedId={selectedId}
                   onSelect={setSelectedId}
                   expired={expired}
                   onSearchAgain={retry}
                   now={live.now}
+                  onStart={(id) => {
+                    setSelectedId(id)
+                    setRiding(true)
+                  }}
+                  riding={riding}
+                  reviewsVersion={reviewsVersion}
                 />
+                {riding && mergedSelected && (
+                  // Rating is always available on a started trip: no time window, so it works in a demo
+                  // and after the rider has got off.
+                  <div className="sticky bottom-0 -mx-4 mt-auto bg-gradient-to-t from-background via-background to-transparent px-4 pb-2 pt-6">
+                    <button
+                      type="button"
+                      onClick={() => setRating(true)}
+                      className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 font-semibold text-white shadow-lg"
+                    >
+                      <span aria-hidden>★</span>
+                      Ride over? Rate it
+                    </button>
+                  </div>
+                )}
               </>
             )}
           </>
         )}
       </div>
+      {rating && mergedSelected && (
+        <RateSheet option={mergedSelected} onClose={closeRating} onSaved={savedRating} />
+      )}
     </div>
   )
 }

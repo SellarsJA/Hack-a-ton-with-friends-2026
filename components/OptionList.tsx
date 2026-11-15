@@ -9,6 +9,9 @@ export default function OptionList({
   expired = false,
   onSearchAgain,
   now,
+  onStart,
+  riding = false,
+  reviewsVersion = 0,
 }: {
   options: Option[]
   selectedId: string | null
@@ -18,6 +21,11 @@ export default function OptionList({
   onSearchAgain?: () => void
   /** Epoch ms from the live poll; enables the on-board button on the selected option. */
   now?: number
+  /** Start the selected trip: the page then shows only it, with a way to rate it. */
+  onStart?: (id: string) => void
+  /** The rider has started this trip; the start button is replaced by the page's rate bar. */
+  riding?: boolean
+  reviewsVersion?: number
 }) {
   return (
     <ul className="flex flex-col gap-3">
@@ -32,7 +40,7 @@ export default function OptionList({
               onClick={() => onSelect(o.id)}
               className="block w-full"
             >
-              <OptionCard option={o} selected={selected} expired={gone} />
+              <OptionCard option={o} selected={selected} expired={gone} reviewsVersion={reviewsVersion} />
             </button>
             {gone && (
               <button
@@ -45,6 +53,15 @@ export default function OptionList({
             )}
             {/* Steps sit directly under the tapped card so they are on screen on a phone. */}
             {selected && <OptionDetail option={o} now={now} />}
+            {selected && !riding && !gone && onStart && (
+              <button
+                type="button"
+                onClick={() => onStart(o.id)}
+                className="h-12 rounded-xl bg-blue-700 px-4 font-semibold text-white shadow-sm"
+              >
+                Start this trip
+              </button>
+            )}
           </li>
         )
       })}

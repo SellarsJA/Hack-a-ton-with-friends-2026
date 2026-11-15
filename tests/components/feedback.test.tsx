@@ -48,9 +48,11 @@ describe('OnBoardButton', () => {
 })
 
 describe('FeedbackForm', () => {
-  it('hides stars without a label', () => {
+  it('asks about the ride, with stars, when there is no fleet number', () => {
     render(<FeedbackForm ride={ride} />)
     expect(screen.queryByText('How was this bus?')).toBeNull()
+    expect(screen.getByText('How was this ride?')).toBeTruthy()
+    expect(screen.getByRole('radio', { name: '4 stars' })).toBeTruthy()
     expect(screen.getByText('Route 9 · this ride')).toBeTruthy()
   })
   it('shows stars with a label', () => {

@@ -146,12 +146,14 @@ describe('contract v3 feedback', () => {
 
   const bad: [string, unknown, string][] = [
     ['stars 6', { ...base, stars: 6 }, 'stars'],
-    ['stars without vehicleLabel', { ...base, vehicleLabel: null, rideKey: 'none:trip1:2026-11-14' }, 'stars'],
     ['unknown accuracy key', { ...base, accuracy: { speed: 3 } }, 'accuracy'],
     ['501-char note', { ...base, note: 'x'.repeat(501) }, 'note'],
     ['rideKey mismatch', { ...base, rideKey: 'x:trip1:2026-11-14' }, 'rideKey'],
     ['empty request', { ...base, stars: undefined, issue: undefined, note: undefined, accuracy: {} }, 'accuracy'],
   ];
+  it('accepts stars without a vehicleLabel (trains and unmatched trips rate the ride)', () => {
+    expect(FeedbackRequest.safeParse({ ...base, vehicleLabel: null, rideKey: 'none:trip1:2026-11-14' }).success).toBe(true)
+  });
   it.each(bad)('rejects %s', (_n, input, field) => {
     const r = FeedbackRequest.safeParse(input);
     expect(r.success).toBe(false);

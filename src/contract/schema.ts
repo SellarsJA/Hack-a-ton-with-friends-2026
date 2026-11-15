@@ -180,9 +180,7 @@ export const FeedbackRequest = z
     if (v.rideKey !== `${v.vehicleLabel ?? 'none'}:${v.tripId}:${v.serviceDate}`) {
       ctx.addIssue({ code: 'custom', path: ['rideKey'], message: 'rideKey does not match ride' });
     }
-    if (v.stars !== undefined && v.vehicleLabel === null) {
-      ctx.addIssue({ code: 'custom', path: ['stars'], message: 'stars require a vehicleLabel' });
-    }
+    // Stars rate the ride. Without a fleet number (trains, unmatched trips) they still count toward the route.
     const answered =
       v.stars !== undefined ||
       v.issue !== undefined ||
@@ -201,6 +199,18 @@ export const VehicleSummary = z.object({
   issues: z.record(Issue, z.number().int().min(0)),
 });
 export type VehicleSummary = z.infer<typeof VehicleSummary>;
+
+/** What riders said about one route: stars over 90 days, issue counts over 30 days. Never includes notes. */
+export const RouteFeedbackSummary = z.object({
+  routeId: z.string(),
+  averageStars: z.number().nullable(),
+  ratingCount: z.number().int().min(0),
+  issues: z.record(Issue, z.number().int().min(0)),
+});
+export type RouteFeedbackSummary = z.infer<typeof RouteFeedbackSummary>;
+
+export const RouteFeedbackResponse = z.object({ routes: z.array(RouteFeedbackSummary) });
+export type RouteFeedbackResponse = z.infer<typeof RouteFeedbackResponse>;
 
 export const RideLink = z.object({
   rideKey: z.string(),

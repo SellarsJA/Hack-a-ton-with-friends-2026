@@ -1,4 +1,4 @@
-import { Issue, type FeedbackRequest, type VehicleSummary } from '@/src/contract/schema'
+import { Issue, type FeedbackRequest, type RouteFeedbackSummary, type VehicleSummary } from '@/src/contract/schema'
 import { getDb, type Db } from '@/src/db/client'
 
 export async function upsertFeedback(profileId: string, f: FeedbackRequest, db: Db = getDb()): Promise<void> {
@@ -54,4 +54,41 @@ export async function vehicleSummary(label: string, db: Db = getDb()): Promise<V
     ratingCount: Number(ratings?.rating_count ?? 0),
     issues,
   }
+}
+
+const emptyIssues = () => Object.fromEntries(Issue.options.map((i) => [i, 0])) as RouteFeedbackSummary['issues']
+
+/**
+ * Per-route rider feedback for the option cards, in the order asked. Same windows as vehicleSummary
+ * (90 days for stars, 30 for issues). route_id is the route short name the ride link carries. Never selects `note`.
+ */
+export async function routeFeedbackSummaries(routeIds: string[], db: Db = getDb()): Promise<RouteFeedbackSummary[]> {
+  if (routeIds.length === 0) return []
+  const [ratings, issueRows] = await Promise.all([
+    db.query<{ route_id: string; average_stars: number | null; rating_count: number }>(
+      `select route_id, round(avg(stars)::numeric, 1)::float8 as average_stars, count(*)::int as rating_count
+         from feedback
+        where route_id = any($1::text[]) and stars is not null and updated_at >= now() - interval '90 days'
+        group by route_id`,
+      [routeIds],
+    ),
+    db.query<{ route_id: string; issue: string; n: number }>(
+      `select route_id, issue, count(*)::int as n
+         from feedback
+        where route_id = any($1::text[]) and issue is not null and updated_at >= now() - interval '30 days'
+        group by route_id, issue`,
+      [routeIds],
+    ),
+  ])
+  return routeIds.map((routeId) => {
+    const r = ratings.find((x) => x.route_id === routeId)
+    const issues = emptyIssues()
+    for (const row of issueRows) if (row.route_id === routeId) issues[row.issue as Issue] = Number(row.n)
+    return {
+      routeId,
+      averageStars: r?.average_stars == null ? null : Number(r.average_stars),
+      ratingCount: Number(r?.rating_count ?? 0),
+      issues,
+    }
+  })
 }

@@ -4,6 +4,7 @@ import { Badge, OCCUPANCY_TEXT, clock, duration, routeName } from './format'
 import ModeIcon from './ModeIcon'
 import TransferBadge from './TransferBadge'
 import VehicleSummary from './VehicleSummary'
+import RouteReviews from './RouteReviews'
 
 export const EXPIRED_TEXT = 'This option has left. Search again.'
 
@@ -47,10 +48,13 @@ export default function OptionCard({
   option,
   selected,
   expired = false,
+  reviewsVersion = 0,
 }: {
   option: Option
   selected: boolean
   expired?: boolean
+  /** Bumped after the rider saves feedback so the route reviews refetch. */
+  reviewsVersion?: number
 }) {
   const { fare } = option
   const transit = option.legs.flatMap((l) => (l.mode === 'walk' ? [] : [l]))
@@ -87,6 +91,7 @@ export default function OptionCard({
           <VehicleSummary key={i} label={l.vehicleLabel} />
         ))}
       </span>
+      <RouteReviews routeIds={transit.map((l) => l.route)} version={reviewsVersion} />
       {option.transfer && <TransferBadge transfer={option.transfer} trainSide={trainSide} />}
       {option.alerts.map((a, i) => (
         <span

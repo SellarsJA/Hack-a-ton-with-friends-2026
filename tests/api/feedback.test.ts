@@ -59,7 +59,6 @@ describe('POST /api/feedback', () => {
   })
   it.each([
     ['stars 0', { ...valid, stars: 0 }, 'stars'],
-    ['stars without label', { ...valid, vehicleLabel: null, rideKey: 'none:T1:2026-11-14' }, 'stars'],
     ['bad issue', { ...valid, issue: 'rude' }, 'issue'],
     ['501-char note', { ...valid, note: 'x'.repeat(501) }, 'note'],
   ])('400 invalid for %s', async (_n, body, field) => {
