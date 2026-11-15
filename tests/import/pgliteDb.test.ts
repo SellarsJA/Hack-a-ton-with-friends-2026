@@ -7,7 +7,7 @@ describe('makeTestDb', () => {
     const n = async (t: string) =>
       Number((await db.query<{ c: string }>(`select count(*) c from ${t}`))[0].c)
     expect(await n('stops')).toBe(9)
-    expect(await n('routes')).toBe(3)
+    expect(await n('routes')).toBe(4)
     expect(await n('trips')).toBe(7)
     expect(await n('service_dates')).toBe(2)
     expect(await n('stop_times')).toBe(17)
