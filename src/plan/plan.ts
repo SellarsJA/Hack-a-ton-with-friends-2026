@@ -3,7 +3,15 @@ import type { LatLng, Leg, PlanResponse } from '@/src/contract/schema'
 import { getDb, type Db } from '@/src/db/client'
 import { getLiveIndex } from '@/src/live/cache'
 import type { LiveIndex } from '@/src/live/decode'
-import { assembleDirectOptions, assembleTransferOptions, mergeAndRank } from '@/src/plan/assemble'
+import {
+  assembleDirectOptions,
+  assembleTransferOptions,
+  fillFallbacks,
+  mergeAndRank,
+  shapeIdsFor,
+  withShapes,
+  type Sources,
+} from '@/src/plan/assemble'
 import { decodeLiveKey } from '@/src/plan/liveKey'
 import { nextDepartures } from '@/src/plan/departures'
 import { dbVehicleLookups, vehiclesForRoutes, type RouteNamesFn, type TripRouteFn } from '@/src/plan/vehicles'
@@ -12,6 +20,8 @@ import { findTransferCandidates } from '@/src/plan/queryTransfer'
 import { activeServiceDays, nowInEdmonton } from '@/src/time/edmonton'
 
 type Shapes = Map<string, [number, number][]>
+
+let warnedTransfers = false
 
 export type PlanDeps = {
   db: Db
@@ -87,25 +97,30 @@ export async function planTrip(
   const days = activeServiceDays(now)
   const [direct, transfers] = await Promise.all([
     deps.findDirectCandidates(deps.db, origin, dest, days),
-    deps.findTransferCandidates(deps.db, origin, dest, days),
+    // A transfer-side failure (e.g. stop_links missing) must still leave the direct options.
+    Promise.resolve()
+      .then(() => deps.findTransferCandidates(deps.db, origin, dest, days))
+      .catch((err: unknown) => {
+        if (!warnedTransfers) {
+          warnedTransfers = true
+          console.warn('[plan] transfer query failed; returning direct options only:', err)
+        }
+        return []
+      }),
   ])
-  const shapeIds = [
-    ...new Set(
-      [...direct, ...transfers.flatMap((t) => [t.first, t.second])]
-        .map((c) => c.shapeId)
-        .filter((s): s is string => s != null),
-    ),
-  ]
-  const shapes = await deps.loadShapes(deps.db, shapeIds)
-  const ctx = { from, to, live, nowEpoch, shapes }
-  const directOptions = assembleDirectOptions(direct, ctx)
-  const transferOptions = await assembleTransferOptions(transfers, {
-    ...ctx,
-    nextDepartures: (args) => deps.nextDepartures(deps.db, args),
-  })
-  const ranked = mergeAndRank(directOptions, transferOptions)
+  // Assemble and rank on straight-line paths with null fallbacks; finish only the survivors.
+  const sources: Sources = new Map()
+  const ctx = { from, to, live, nowEpoch }
+  const ranked = mergeAndRank(
+    assembleDirectOptions(direct, ctx, sources),
+    assembleTransferOptions(transfers, ctx, sources),
+  )
   if (ranked.length === 0) return empty('no_trips_soon')
-  const options = ranked.map((o) => ({
+  const [shapes, withFallbacks] = await Promise.all([
+    deps.loadShapes(deps.db, shapeIdsFor(ranked, sources)),
+    fillFallbacks(ranked, sources, { live, nextDepartures: (args) => deps.nextDepartures(deps.db, args) }),
+  ])
+  const options = withShapes(withFallbacks, sources, shapes).map((o) => ({
     ...o,
     legs: o.legs.map((l): Leg => (l.mode === 'walk' ? l : { ...l, vehiclePosition: vehicleAt(live, l.tripId, l.serviceDate) })),
   }))

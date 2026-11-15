@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
-import { assembleDirectOptions, assembleTransferOptions, mergeAndRank } from '@/src/plan/assemble'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { assembleDirectOptions, assembleTransferOptions, fillFallbacks, mergeAndRank, type Sources } from '@/src/plan/assemble'
 import type { Candidate } from '@/src/plan/query'
 import type { TransferCandidate } from '@/src/plan/queryTransfer'
 import type { Departure } from '@/src/plan/departures'
@@ -43,7 +43,9 @@ const ctx = (live: LiveIndex | null = null, nd: (a: never) => Promise<Departure[
 describe('assembleTransferOptions', () => {
   it('builds legs, transfer, fare and a 2-leg live key; skips nextDepartures when not at risk', async () => {
     const nd = vi.fn(async () => [])
-    const [o] = await assembleTransferOptions([tc({ walk: 180 })], ctx(null, nd))
+    const sources: Sources = new Map()
+    const [o] = assembleTransferOptions([tc({ walk: 180 })], ctx(), sources)
+    await fillFallbacks([o], sources, ctx(null, nd))
     expect(o.legs.map((l) => l.mode)).toEqual(['walk', 'bus', 'walk', 'bus', 'walk'])
     const before = o.legs.flatMap((l) => (l.mode === 'walk' ? [] : [l.transferWalkMinutesBefore]))
     expect(before).toEqual([null, 3])
@@ -65,18 +67,48 @@ describe('assembleTransferOptions', () => {
     expect(o.legs.map((l) => l.mode)).toEqual(['bus', 'bus', 'walk'])
   })
 
-  it('sets fallbackDepartAt only for at-risk, from nextDepartures', async () => {
+  it('assembles at-risk options with a null fallback and no lookup', async () => {
+    const nd = vi.fn(async () => [])
+    const [o] = assembleTransferOptions([tc({ spare: -2 })], ctx(null, nd))
+    expect(o.transfer).toMatchObject({ status: 'at_risk', fallbackDepartAt: null })
+    expect(nd).not.toHaveBeenCalled()
+  })
+
+  it('fillFallbacks sets fallbackDepartAt only for at-risk, from nextDepartures', async () => {
     const fb = toInstant(DATE, base + 3000).toSeconds()
     const nd = vi.fn(async () => [{ tripId: 't3', serviceDate: DATE, routeId: 'r2', headsign: 'H', departEpoch: fb, realtime: false }])
-    const [o] = await assembleTransferOptions([tc({ spare: -2 })], ctx(null, nd))
+    const sources: Sources = new Map()
+    const [o] = await fillFallbacks(assembleTransferOptions([tc({ spare: -2 })], ctx(), sources), sources, ctx(null, nd))
     expect(o.transfer!.status).toBe('at_risk')
     expect(o.transfer!.fallbackDepartAt).toBe('2026-11-14T12:50:00-07:00')
     expect(nd).toHaveBeenCalledWith({ stopId: 'Y', routeId: 'r2', afterEpoch: toInstant(DATE, base + 600).toSeconds(), limit: 1, live: null })
   })
 
   it('at-risk with no later departure gets a null fallback', async () => {
-    const [o] = await assembleTransferOptions([tc({ spare: -2 })], ctx())
+    const sources: Sources = new Map()
+    const [o] = await fillFallbacks(assembleTransferOptions([tc({ spare: -2 })], ctx(), sources), sources, ctx())
     expect(o.transfer!.fallbackDepartAt).toBeNull()
+  })
+
+  describe('a failed fallback lookup', () => {
+    afterEach(() => vi.restoreAllMocks())
+
+    it('nulls only that option and keeps it', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const fb = toInstant(DATE, base + 3000).toSeconds()
+      const nd = vi.fn(async (a: { stopId: string }) => {
+        if (a.stopId === 'Y') throw new Error('db down')
+        return [{ tripId: 't3', serviceDate: DATE, routeId: 'r2', headsign: 'H', departEpoch: fb, realtime: false }]
+      })
+      const ok = tc({ spare: -2 })
+      ok.second.board.stopId = 'Z'
+      ok.second.routeId = 'r3'
+      ok.second.routeShortName = 'r3'
+      const sources: Sources = new Map()
+      const out = await fillFallbacks(assembleTransferOptions([tc({ spare: -2 }), ok], ctx(), sources), sources, ctx(null, nd as never))
+      expect(out).toHaveLength(2)
+      expect(out.map((o) => o.transfer!.fallbackDepartAt)).toEqual([null, '2026-11-14T12:50:00-07:00'])
+    })
   })
 
   const mkTrip = (id: string, seq: number, stopId: string): [string, TripLive] => [id, { startDate: DATE, stops: [{ stopId, stopSequence: seq, arrival: null, departure: null, delay: 0 }], vehicle: null }]
@@ -125,6 +157,16 @@ describe('mergeAndRank', () => {
     expect(tArrive).not.toBeNaN()
     const merged = mergeAndRank(d, [shifted])
     expect(merged.map((o) => o.transfer?.status ?? 'direct')).toEqual(['direct', 'tight'])
+  })
+
+  it('on a tie in rank key and leaveAt, the direct option ranks first', async () => {
+    const d = await direct('9', base + 60, base + 1500)
+    const t = await assembleTransferOptions([tc()], ctx())
+    expect(t[0].transfer!.status).toBe('on_track')
+    const tied = { ...t[0], leaveAt: d[0].leaveAt, arriveAt: d[0].arriveAt }
+    for (const [a, b] of [[d, [tied]], [[], [tied, ...d]]] as const) {
+      expect(mergeAndRank([...a], [...b]).map((o) => (o.transfer ? 'transfer' : 'direct'))).toEqual(['direct', 'transfer'])
+    }
   })
 
   const seqOf = (o: { legs: { mode: string; route?: string }[] }) =>

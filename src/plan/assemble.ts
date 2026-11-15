@@ -2,12 +2,12 @@ import { DateTime } from 'luxon'
 import type { LatLng, Leg, Option } from '@/src/contract/schema'
 import { fareFor } from '@/src/fares/fare'
 import type { LiveIndex } from '@/src/live/decode'
-import { iso, isRail, transitLeg, zoneOf, type Shapes } from '@/src/plan/legs'
+import { iso, isRail, transitLeg, transitPath, zoneOf, type Shapes } from '@/src/plan/legs'
 import { encodeLiveKey, liveKeyFor } from '@/src/plan/liveKey'
 import type { Departure } from '@/src/plan/departures'
 import type { Candidate } from '@/src/plan/query'
 import type { TransferCandidate } from '@/src/plan/queryTransfer'
-import { applyRealtime } from '@/src/plan/realtime'
+import { applyRealtime, type RealtimeResult } from '@/src/plan/realtime'
 import { rankKey, transferStatus } from '@/src/plan/transfer'
 import { ZONE } from '@/src/time/edmonton'
 
@@ -16,8 +16,21 @@ export type AssembleCtx = {
   to: LatLng
   live: LiveIndex | null
   nowEpoch: number
-  shapes: Shapes
+  /** Shapes for the transit-leg paths; without them the paths are straight lines (see withShapes). */
+  shapes?: Shapes
 }
+
+/** Where an assembled option came from: its candidates and their realtime results, in leg order. */
+export type OptionSource = { cands: Candidate[]; rts: RealtimeResult[]; tw: number | null }
+
+/**
+ * Side map from an option's liveKey to its source, so the survivors of mergeAndRank can be finished
+ * (shapes, fallbacks) without adding fields to the contract. A liveKey names the trips, stops and
+ * transfer walk, so it identifies the option.
+ */
+export type Sources = Map<string, OptionSource>
+
+const NO_SHAPES: Shapes = new Map()
 
 function alertsFor(live: LiveIndex | null, cands: Candidate[]): { headline: string }[] {
   const headlines = new Set<string>()
@@ -38,7 +51,7 @@ function alertsFor(live: LiveIndex | null, cands: Candidate[]): { headline: stri
 
 const pt = (s: { lat: number; lon: number }): [number, number] => [s.lat, s.lon]
 
-export function assembleDirectOptions(cands: Candidate[], ctx: AssembleCtx): Option[] {
+export function assembleDirectOptions(cands: Candidate[], ctx: AssembleCtx, sources?: Sources): Option[] {
   const timed = cands
     .map((c) => ({ c, rt: applyRealtime(c, ctx.live) }))
     // Keep only buses the rider can still walk to: live time when known, schedule otherwise.
@@ -63,13 +76,15 @@ export function assembleDirectOptions(cands: Candidate[], ctx: AssembleCtx): Opt
     if (c.board.walkSeconds > 0) {
       legs.push({ mode: 'walk', minutes: c.board.walkSeconds / 60, path: [[ctx.from.lat, ctx.from.lon], pt(boardPt)] })
     }
-    legs.push(transitLeg(c, rt, ctx.shapes))
+    legs.push(transitLeg(c, rt, ctx.shapes ?? NO_SHAPES))
     if (c.alight.walkSeconds > 0) {
       legs.push({ mode: 'walk', minutes: c.alight.walkSeconds / 60, path: [pt(alightPt), [ctx.to.lat, ctx.to.lon]] })
     }
+    const liveKey = encodeLiveKey({ legs: [liveKeyFor(c)], tw: null })
+    sources?.set(liveKey, { cands: [c], rts: [rt], tw: null })
     return {
       id: `opt-${i + 1}`,
-      liveKey: encodeLiveKey({ legs: [liveKeyFor(c)], tw: null }),
+      liveKey,
       leaveAt: iso(leaveAt),
       arriveAt: iso(finalArrive),
       durationMinutes: Math.ceil((finalArrive - leaveAt) / 60),
@@ -94,31 +109,20 @@ export type NextDeparturesFn = (args: {
   live: LiveIndex | null
 }) => Promise<Departure[]>
 
-export async function assembleTransferOptions(
-  cands: TransferCandidate[],
-  ctx: AssembleCtx & { nextDepartures: NextDeparturesFn },
-): Promise<Option[]> {
-  const timed = cands
+/**
+ * Every option comes back with `fallbackDepartAt: null`; ranking needs only the status, so the
+ * fallback is looked up afterwards for the survivors (fillFallbacks).
+ */
+export function assembleTransferOptions(cands: TransferCandidate[], ctx: AssembleCtx, sources?: Sources): Option[] {
+  const shapes = ctx.shapes ?? NO_SHAPES
+  return cands
     .map((tc) => ({ tc, rt1: applyRealtime(tc.first, ctx.live), rt2: applyRealtime(tc.second, ctx.live) }))
     // Same catchability rule as direct options: the first bus must still be reachable on foot.
     .filter((x) => x.rt1.departEpoch - x.tc.first.board.walkSeconds >= ctx.nowEpoch)
-
-  return Promise.all(
-    timed.map(async ({ tc, rt1, rt2 }): Promise<Option> => {
+    .map(({ tc, rt1, rt2 }): Option => {
       const { first, second, transferWalkSeconds: tw } = tc
       const bothLive = rt1.realtime && rt2.realtime && !isRail(first) && !isRail(second)
       const status = transferStatus(rt1.arriveEpoch, rt2.departEpoch, tw, bothLive)
-      let fallbackDepartAt: string | null = null
-      if (status.status === 'at_risk') {
-        const next = await ctx.nextDepartures({
-          stopId: second.board.stopId,
-          routeId: second.routeId,
-          afterEpoch: rt1.arriveEpoch + tw,
-          limit: 1,
-          live: ctx.live,
-        })
-        fallbackDepartAt = next.length > 0 ? iso(next[0].departEpoch) : null
-      }
 
       const leaveAt = rt1.departEpoch - first.board.walkSeconds
       const finalArrive = rt2.arriveEpoch + second.alight.walkSeconds
@@ -126,16 +130,18 @@ export async function assembleTransferOptions(
       if (first.board.walkSeconds > 0) {
         legs.push({ mode: 'walk', minutes: first.board.walkSeconds / 60, path: [[ctx.from.lat, ctx.from.lon], pt(first.board)] })
       }
-      legs.push(transitLeg(first, rt1, ctx.shapes))
+      legs.push(transitLeg(first, rt1, shapes))
       if (tw > 0) legs.push({ mode: 'walk', minutes: tw / 60, path: [pt(first.alight), pt(second.board)] })
-      legs.push(transitLeg(second, rt2, ctx.shapes, tw / 60))
+      legs.push(transitLeg(second, rt2, shapes, tw / 60))
       if (second.alight.walkSeconds > 0) {
         legs.push({ mode: 'walk', minutes: second.alight.walkSeconds / 60, path: [pt(second.alight), [ctx.to.lat, ctx.to.lon]] })
       }
 
+      const liveKey = encodeLiveKey({ legs: [liveKeyFor(first), liveKeyFor(second)], tw })
+      sources?.set(liveKey, { cands: [first, second], rts: [rt1, rt2], tw })
       return {
         id: '',
-        liveKey: encodeLiveKey({ legs: [liveKeyFor(first), liveKeyFor(second)], tw }),
+        liveKey,
         leaveAt: iso(leaveAt),
         arriveAt: iso(finalArrive),
         durationMinutes: Math.ceil((finalArrive - leaveAt) / 60),
@@ -145,10 +151,67 @@ export async function assembleTransferOptions(
           legs: [first, second].map((c) => ({ agencyId: c.agencyId, routeShortName: c.routeShortName ?? '' })),
         }),
         alerts: alertsFor(ctx.live, [first, second]),
-        transfer: { stop: second.board.name, ...status, fallbackDepartAt },
+        transfer: { stop: second.board.name, ...status, fallbackDepartAt: null },
         snow: [],
         legs,
       }
+    })
+}
+
+/** The shape ids the given options' transit legs use. */
+export function shapeIdsFor(options: Option[], sources: Sources): string[] {
+  const ids = options.flatMap((o) => sources.get(o.liveKey)?.cands.map((c) => c.shapeId) ?? [])
+  return [...new Set(ids.filter((s): s is string => s != null))]
+}
+
+/** Rebuilds each option's transit-leg paths from the loaded shapes. */
+export function withShapes(options: Option[], sources: Sources, shapes: Shapes): Option[] {
+  return options.map((o) => {
+    const src = sources.get(o.liveKey)
+    if (!src) return o
+    let k = 0
+    const legs = o.legs.map((l): Leg => {
+      if (l.mode === 'walk') return l
+      const c = src.cands[k++]
+      return c ? { ...l, path: transitPath(c, shapes) } : l
+    })
+    return { ...o, legs }
+  })
+}
+
+let warnedFallback = false
+
+/**
+ * Looks up the next departure after the transfer for each at-risk option, in parallel.
+ * A failed lookup leaves that option's fallbackDepartAt null.
+ */
+export async function fillFallbacks(
+  options: Option[],
+  sources: Sources,
+  ctx: { live: LiveIndex | null; nextDepartures: NextDeparturesFn },
+): Promise<Option[]> {
+  return Promise.all(
+    options.map(async (o): Promise<Option> => {
+      const src = sources.get(o.liveKey)
+      if (o.transfer?.status !== 'at_risk' || !src || src.cands.length !== 2 || src.tw === null) return o
+      const second = src.cands[1]
+      let fallbackDepartAt: string | null = null
+      try {
+        const next = await ctx.nextDepartures({
+          stopId: second.board.stopId,
+          routeId: second.routeId,
+          afterEpoch: src.rts[0].arriveEpoch + src.tw,
+          limit: 1,
+          live: ctx.live,
+        })
+        fallbackDepartAt = next.length > 0 ? iso(next[0].departEpoch) : null
+      } catch (err) {
+        if (!warnedFallback) {
+          warnedFallback = true
+          console.warn('[plan] fallback departure lookup failed:', err)
+        }
+      }
+      return { ...o, transfer: { ...o.transfer, fallbackDepartAt } }
     }),
   )
 }
@@ -161,8 +224,14 @@ const routeSequence = (o: Option): string =>
 /** One ranked list: best per route sequence, at most 5, re-numbered opt-1..opt-5. */
 export function mergeAndRank(direct: Option[], transfer: Option[]): Option[] {
   const ranked = [...direct, ...transfer]
-    .map((o) => ({ o, key: rankKey(epochOf(o.arriveAt), o.transfer), leave: epochOf(o.leaveAt) }))
-    .sort((a, b) => a.key - b.key || b.leave - a.leave || a.o.id.localeCompare(b.o.id))
+    .map((o) => ({
+      o,
+      key: rankKey(epochOf(o.arriveAt), o.transfer),
+      leave: epochOf(o.leaveAt),
+      transit: o.legs.filter((l) => l.mode !== 'walk').length,
+    }))
+    // On a tie, the later departure, then fewer transit legs (direct before transfer), then id.
+    .sort((a, b) => a.key - b.key || b.leave - a.leave || a.transit - b.transit || a.o.id.localeCompare(b.o.id))
   const seen = new Set<string>()
   const out: Option[] = []
   for (const { o } of ranked) {

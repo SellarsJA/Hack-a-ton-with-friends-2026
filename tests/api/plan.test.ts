@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DateTime } from 'luxon'
 import { NextRequest } from 'next/server'
 import { planTrip, type PlanDeps } from '@/src/plan/plan'
@@ -9,6 +9,7 @@ import { makeTestDb } from '../helpers/pgliteDb'
 import { __resetLiveCacheForTests, getLiveIndex } from '@/src/live/cache'
 import { ZONE } from '@/src/time/edmonton'
 import type { NearbyStop, Candidate } from '@/src/plan/query'
+import type { TransferCandidate } from '@/src/plan/queryTransfer'
 import type { LiveIndex } from '@/src/live/decode'
 
 const from = { lat: 53.5444, lon: -113.4909 }
@@ -109,6 +110,74 @@ describe('planTrip', () => {
   })
 })
 
+/** Ten at-risk transfers, each on its own route pair, all ranked after `cand` (the direct trip). */
+const atRisk = (n = 10): TransferCandidate[] =>
+  Array.from({ length: n }, (_, i) => {
+    const dep1 = 18 * 3600 + 600 + i * 60
+    const arr1 = dep1 + 600
+    const dep2 = arr1 - 60
+    const mk = (id: string) => ({
+      tripId: id, serviceDate: '2026-11-14', routeId: id.toUpperCase(), agencyId: '1', routeShortName: id.toUpperCase(),
+      routeType: 3, headsign: 'H', shapeId: `sh-${id}`,
+    })
+    return {
+      first: { ...mk(`f${i}`), board: { ...stop('A', from.lat, from.lon), seq: 1, dep: dep1 }, alight: { ...stop('X', 53.51, -113.5), walkSeconds: 0, seq: 4, arr: arr1 } },
+      second: { ...mk(`s${i}`), board: { ...stop('Y', 53.5101, -113.5), walkSeconds: 0, seq: 2, dep: dep2 }, alight: { ...stop('B', to.lat, to.lon), seq: 7, arr: dep2 + 900 } },
+      transferWalkSeconds: 0,
+    }
+  })
+
+const tripsOf = (o: PlanResponse['options'][number]) => decodeLiveKey(o.liveKey)!.legs.map((l) => l.t)
+
+describe('planTrip transfer path', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('a rejecting transfer query still returns the direct options', async () => {
+    const r = await planTrip(from, to, deps({ findTransferCandidates: async () => { throw new Error('stop_links missing') } }))
+    expect(PlanResponse.parse(r).options.map(tripsOf)).toEqual([['t1']])
+    expect(r.emptyReason).toBeNull()
+  })
+
+  it('a rejecting fallback lookup keeps the at-risk option with a null fallback', async () => {
+    const r = PlanResponse.parse(await planTrip(from, to, deps({
+      findDirectCandidates: async () => [],
+      findTransferCandidates: async () => atRisk(1),
+      nextDepartures: async () => { throw new Error('db down') },
+    })))
+    expect(r.options).toHaveLength(1)
+    expect(r.options[0].transfer).toMatchObject({ status: 'at_risk', fallbackDepartAt: null })
+  })
+
+  it('looks up fallbacks only for at-risk options that survive ranking', async () => {
+    const nextDepartures = vi.fn(async () => [])
+    const r = PlanResponse.parse(await planTrip(from, to, deps({ findTransferCandidates: async () => atRisk(10), nextDepartures })))
+    expect(r.options).toHaveLength(5)
+    const survivors = r.options.filter((o) => o.transfer?.status === 'at_risk').length
+    expect(survivors).toBe(4)
+    expect(nextDepartures).toHaveBeenCalledTimes(survivors)
+  })
+
+  it('loads shapes once, only for the final options', async () => {
+    const loadShapes = vi.fn(async () => new Map<string, [number, number][]>())
+    const direct = { ...cand, shapeId: 'sh-t1' }
+    const r = PlanResponse.parse(await planTrip(from, to, deps({
+      findDirectCandidates: async () => [direct],
+      findTransferCandidates: async () => atRisk(10),
+      loadShapes,
+    })))
+    expect(loadShapes).toHaveBeenCalledTimes(1)
+    const want = r.options.flatMap(tripsOf).map((t) => `sh-${t}`)
+    expect(want).toHaveLength(9)
+    const calls = loadShapes.mock.calls as unknown as [unknown, string[]][]
+    expect([...calls[0][1]].sort()).toEqual([...want].sort())
+  })
+})
+
 describe('route handlers', () => {
   it('plan returns 400 for bad coordinates', async () => {
     const { GET } = await import('@/app/api/plan/route')
@@ -174,6 +243,16 @@ describe('smoke (gtfs-mini)', () => {
     const { loadShapes } = await import('@/src/plan/plan')
     return { db, findNearbyStops, findDirectCandidates, findTransferCandidates, nextDepartures, loadShapes, getLiveIndex: async () => null, now: () => now }
   }
+
+  it('slices the fixture shape into each route 9 leg (Southgate, Mill Woods, Valley Line South)', async () => {
+    const d = await realDeps()
+    for (const dest of [to, { lat: 53.457, lon: -113.428 }, { lat: 53.462, lon: -113.45 }]) {
+      const r = PlanResponse.parse(await planTrip(from, dest, d))
+      const nine = r.options.flatMap((o) => o.legs).filter((l) => l.mode !== 'walk' && l.route === '9')
+      expect(nine.length).toBeGreaterThan(0)
+      for (const l of nine) expect(l.path.length).toBeGreaterThan(2)
+    }
+  })
 
   it('offers the A>E transfer from Churchill to Mill Woods', async () => {
     const r = PlanResponse.parse(await planTrip(from, { lat: 53.457, lon: -113.428 }, await realDeps()))
