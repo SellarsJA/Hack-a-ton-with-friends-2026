@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { tomtomRasterUrl, tomtomCopyrightUrl } from '@/src/tomtom/tiles'
+import { tomtomRasterUrl, tomtomCopyrightUrl, attributionOptions } from '@/src/tomtom/tiles'
 
 describe('tomtom urls', () => {
   it('builds the raster tile template', () => {
@@ -9,6 +9,9 @@ describe('tomtom urls', () => {
   })
   it('builds the copyright caption url', () => {
     expect(tomtomCopyrightUrl('abc')).toBe('https://api.tomtom.com/map/2/copyrights/caption.json?key=abc')
+  })
+  it('keeps attribution non-compact', () => {
+    expect(attributionOptions('© TomTom')).toEqual({ customAttribution: '© TomTom', compact: false })
   })
   it('encodes the key', () => {
     expect(tomtomRasterUrl('a&b')).toContain('key=a%26b')

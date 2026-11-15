@@ -5,7 +5,7 @@ import * as maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type { Option } from '@/src/contract/schema'
 import { buildLineFeatures, labelPoints, boundsFor } from '@/src/map/lines'
-import { tomtomRasterUrl, tomtomCopyrightUrl } from '@/src/tomtom/tiles'
+import { tomtomRasterUrl, tomtomCopyrightUrl, attributionOptions } from '@/src/tomtom/tiles'
 
 type Props = {
   options: Option[]
@@ -53,7 +53,7 @@ export default function TripMap({ options, selectedId, showWalking, onSelect }: 
     let attribution: maplibregl.AttributionControl | null = null
     const setAttribution = (text: string) => {
       if (attribution) map.removeControl(attribution)
-      attribution = new maplibregl.AttributionControl({ customAttribution: text })
+      attribution = new maplibregl.AttributionControl(attributionOptions(text))
       map.addControl(attribution, 'bottom-right')
     }
     setAttribution(FALLBACK_ATTRIBUTION)
