@@ -1,4 +1,59 @@
-import type { Option, Vehicle } from '@/src/contract/schema'
+import type { Option, Vehicle, RouteDetail } from '@/src/contract/schema'
+
+export const ROUTE_FALLBACK_COLOR = '#2563EB'
+
+export const routeColor = (color: string | null): string =>
+  color ? (color.startsWith('#') ? color : `#${color}`) : ROUTE_FALLBACK_COLOR
+
+/**
+ * Route page features. Every pattern's path is a 'line' (the pattern at `patternIndex` has on=1);
+ * the stops of that pattern are 'stop' points, with the selected one flagged. [lon, lat].
+ */
+export function buildRouteFeatures(
+  detail: RouteDetail,
+  selectedStopId: string | null,
+  patternIndex: number,
+): GeoJSON.FeatureCollection {
+  const color = routeColor(detail.route.color)
+  const features: GeoJSON.Feature[] = []
+  detail.patterns.forEach((p, i) => {
+    if (p.path.length < 2) return
+    features.push({
+      type: 'Feature',
+      properties: { kind: 'line', color, on: i === patternIndex ? 1 : 0, headsign: p.headsign },
+      geometry: { type: 'LineString', coordinates: p.path.map(([lat, lon]) => [lon, lat]) },
+    })
+  })
+  const current = detail.patterns[patternIndex]
+  for (const s of current?.stops ?? []) {
+    features.push({
+      type: 'Feature',
+      properties: { kind: 'stop', stopId: s.stopId, name: s.name, color, selected: s.stopId === selectedStopId ? 1 : 0 },
+      geometry: { type: 'Point', coordinates: [s.lon, s.lat] },
+    })
+  }
+  return { type: 'FeatureCollection', features }
+}
+
+/** [[west, south], [east, north]] of one pattern's path and stops, or null when empty. */
+export function patternBounds(
+  detail: RouteDetail,
+  patternIndex: number,
+): [[number, number], [number, number]] | null {
+  const p = detail.patterns[patternIndex]
+  if (!p) return null
+  const pts: [number, number][] = [
+    ...p.path.map(([lat, lon]): [number, number] => [lon, lat]),
+    ...p.stops.map((s): [number, number] => [s.lon, s.lat]),
+  ]
+  if (pts.length === 0) return null
+  const lons = pts.map((q) => q[0])
+  const lats = pts.map((q) => q[1])
+  return [
+    [Math.min(...lons), Math.min(...lats)],
+    [Math.max(...lons), Math.max(...lats)],
+  ]
+}
 
 export const OPTION_COLORS = ['#2563EB', '#7C3AED', '#0891B2', '#DB2777', '#4B5563'] as const
 const WALK_COLOR = '#9CA3AF'
