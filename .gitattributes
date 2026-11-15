@@ -1,0 +1,2 @@
+# csv-parse auto-detects the record delimiter; keep fixtures LF on every checkout.
+tests/fixtures/** text eol=lf

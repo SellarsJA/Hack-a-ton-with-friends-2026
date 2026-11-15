@@ -32,7 +32,7 @@ Each command is shown for bash and for PowerShell (the team uses Windows). In th
    - `select count(*) from stop_links;` expect 6,000–200,000 (a run on today's feed gave about 39,500). A count outside that range means the transfer links did not build; check the import output before going on.
 7. In the TomTom dashboard, restrict the key to the Vercel domain and `localhost`.
 8. On first load with the real key, verify the TomTom raster tile URL and the `copyrightsCaption` field (both were confirmed from docs only). The caption should appear on the map and in the footer.
-9. Run `npm run build` and confirm it succeeds (on Windows, from Git Bash; see Notes).
+9. Run `npm run build` and confirm it succeeds (bash, PowerShell or cmd all work).
 
 ## 2. Phone walkthrough on mobile data
 
@@ -46,6 +46,8 @@ Each command is shown for bash and for PowerShell (the team uses Windows). In th
 ## 3. Rerun the import
 
 **Tier 2 production update.** Run these once against the existing production database. The schema step is safe to rerun.
+
+**Run step 1 (`npm run db:schema`) against production *before* the tier 2 code deploys.** Tier 2 queries the new `stop_links` table for transfers and relies on the new `stop_times (stop_id, arr)` index. If the code goes out first, every transfer query fails because `stop_links` does not exist: plans still return direct options only, and the failure is logged once as a warning. The index keeps the transfer query from scanning `stop_times`. Then run the import (step 2) so `stop_links` is filled; until it is, no transfers are offered.
 
 1. Apply the schema. This creates `stop_links` and the `stop_times (stop_id, arr)` index:
    - bash: `DATABASE_URL='<prod>' npm run db:schema`
@@ -102,5 +104,4 @@ Tick each item on a phone, on mobile data, against the deployed site.
 - TomTom's free tier is "Evaluation Use" only (internal testing): fine for the demo; a public launch needs a TomTom plan or another map provider.
 - Watch TomTom usage on the key dashboard during the weekend. Past the free limit, requests are blocked, not billed.
 - Local dev: `cp .env.example .env.local` (PowerShell: `Copy-Item .env.example .env.local`), fill in the values, then `npm run dev`. `NEXT_PUBLIC_USE_FIXTURE=1` makes the results page use `fixtures/plan.json`.
-- Known issue: `npm run dev` and `npm run build` run a `cp` step (`predev`/`prebuild`), so on Windows run them from Git Bash, not PowerShell or cmd. This will be fixed.
 - The footer attribution (Open Government Licence – City of Edmonton) must stay; the site is not run by the City.

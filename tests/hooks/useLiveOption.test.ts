@@ -112,7 +112,7 @@ describe('useLiveOption', () => {
 
   it('ages the data through failed polls: 25 s then 4 failures is over 120 s', async () => {
     const f = vi
-      .fn((..._a: unknown[]): Promise<unknown> => Promise.reject(new Error('net')))
+      .fn((): Promise<unknown> => Promise.reject(new Error('net')))
       .mockImplementationOnce(() => okRes({ ...liveFixture, liveDataAgeSeconds: 25 }))
       .mockImplementationOnce(() => Promise.resolve({ ok: false, json: () => Promise.resolve({}) }))
     vi.stubGlobal('fetch', f)
