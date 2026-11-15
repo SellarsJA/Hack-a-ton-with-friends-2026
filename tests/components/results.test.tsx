@@ -40,7 +40,9 @@ describe('OptionList', () => {
     render(<Harness />)
     const cards = screen.getAllByRole('button', { name: /Leave/ })
     expect(cards).toHaveLength(4)
-    expect(within(cards[0]).getByText('Leave 6:07 PM · 34 min · $3.00')).toBeTruthy()
+    expect(within(cards[0]).getByText('Leave 6:07 PM')).toBeTruthy()
+    expect(within(cards[0]).getByText('34 min')).toBeTruthy()
+    expect(within(cards[0]).getByText('$3.00')).toBeTruthy()
     expect(within(cards[0]).getByText('Cash $3.75')).toBeTruthy()
     expect(within(cards[0]).getByText('Live')).toBeTruthy()
     expect(within(cards[1]).getByText('Scheduled')).toBeTruthy()
@@ -78,8 +80,21 @@ describe('OptionList', () => {
   it('appends (estimated) when the fare is estimated', () => {
     const o = { ...plan.options[0], fare: { ...plan.options[0].fare, estimated: true, cashAmount: null } }
     render(<OptionList options={[o]} selectedId={o.id} onSelect={() => {}} />)
-    expect(screen.getByText('Leave 6:07 PM · 34 min · $3.00 (estimated)')).toBeTruthy()
+    expect(screen.getByText('$3.00 (estimated)')).toBeTruthy()
     expect(screen.queryByText(/Cash/)).toBeNull()
+  })
+})
+
+describe('OptionCard leg strip', () => {
+  it('shows a mode icon and route chip for each leg', () => {
+    const o = plan.options[3]
+    render(<OptionList options={[o]} selectedId={null} onSelect={() => {}} />)
+    const card = screen.getByRole('button', { name: /Leave/ })
+    const modes = [...card.querySelectorAll('svg[data-mode]')].map((e) => e.getAttribute('data-mode'))
+    expect(modes).toEqual(o.legs.map((l) => l.mode))
+    expect(within(card).getByText('Valley Line')).toBeTruthy()
+    expect(card.textContent).toContain('Bus')
+    expect(card.textContent).toContain('Train')
   })
 })
 
