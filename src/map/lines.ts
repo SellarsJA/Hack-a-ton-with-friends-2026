@@ -1,5 +1,8 @@
 import type { Option, Vehicle, RouteDetail } from '@/src/contract/schema'
 
+/** Display form of a route short name: GTFS pads some numbers ("004"), riders say "4". */
+export const routeName = (route: string) => route.replace(/^0+(?=\d)/, '')
+
 export const ROUTE_FALLBACK_COLOR = '#2563EB'
 
 export const routeColor = (color: string | null): string =>
@@ -55,38 +58,73 @@ export function patternBounds(
   ]
 }
 
-export const OPTION_COLORS = ['#2563EB', '#7C3AED', '#0891B2', '#DB2777', '#4B5563'] as const
-const WALK_COLOR = '#9CA3AF'
+/** One colour per way of travelling, shared by the map lines and the option cards. */
+export const MODE_COLORS = { bus: '#2563EB', rail: '#7C3AED', walk: '#9CA3AF' } as const
+/** Lines of the options that are not selected: present and tappable, but quiet. */
+export const MUTED_COLOR = '#94A3B8'
 
-const colorFor = (i: number) => OPTION_COLORS[i % OPTION_COLORS.length]
-
+/**
+ * Trip lines. The selected option's legs take their mode colour and on=1; every other option is muted.
+ * Walk legs are only drawn for the selected option, and only with showWalking.
+ */
 export function buildLineFeatures(
   options: Option[],
   selectedId: string | null,
   showWalking: boolean,
 ): GeoJSON.FeatureCollection {
   // Unselected first so the selected option draws on top.
-  const ordered = options
-    .map((o, i) => ({ o, i }))
-    .sort((a, b) => Number(a.o.id === selectedId) - Number(b.o.id === selectedId))
+  const ordered = [...options].sort((a, b) => Number(a.id === selectedId) - Number(b.id === selectedId))
   const features: GeoJSON.Feature[] = []
-  for (const { o, i } of ordered) {
+  for (const o of ordered) {
     const selected = o.id === selectedId
     for (const leg of o.legs) {
       const walk = leg.mode === 'walk'
-      if (walk && !showWalking) continue
+      if (walk && (!showWalking || !selected)) continue
       if (leg.path.length < 2) continue
       features.push({
         type: 'Feature',
         properties: {
           optionId: o.id,
-          color: walk ? WALK_COLOR : colorFor(i),
+          color: selected ? MODE_COLORS[leg.mode] : MUTED_COLOR,
           // Strings, not booleans: a false property can be dropped when the line is tiled.
           kind: walk ? 'walk' : 'ride',
           on: selected ? 1 : 0,
         },
         geometry: { type: 'LineString', coordinates: leg.path.map(([lat, lon]) => [lon, lat]) },
       })
+    }
+  }
+  return { type: 'FeatureCollection', features }
+}
+
+/**
+ * Where the selected option boards and leaves each vehicle, as [lon, lat] points.
+ * A stop shared by two legs (a transfer) is one point, flagged transfer=1.
+ */
+export function buildStopFeatures(option: Option | undefined): GeoJSON.FeatureCollection {
+  const features: GeoJSON.Feature[] = []
+  if (!option) return { type: 'FeatureCollection', features }
+  const seen = new Map<string, GeoJSON.Feature>()
+  for (const leg of option.legs) {
+    if (leg.mode === 'walk' || leg.path.length === 0) continue
+    const ends: [[number, number], string][] = [
+      [leg.path[0], leg.fromStop],
+      [leg.path[leg.path.length - 1], leg.toStop],
+    ]
+    for (const [[lat, lon], name] of ends) {
+      const key = name
+      const prev = seen.get(key)
+      if (prev) {
+        prev.properties!.transfer = 1
+        continue
+      }
+      const f: GeoJSON.Feature = {
+        type: 'Feature',
+        properties: { name, color: MODE_COLORS[leg.mode], transfer: 0 },
+        geometry: { type: 'Point', coordinates: [lon, lat] },
+      }
+      seen.set(key, f)
+      features.push(f)
     }
   }
   return { type: 'FeatureCollection', features }
@@ -120,7 +158,7 @@ export function labelPoints(
     const first = transit[0]
     if (!first || first.path.length === 0) continue
     const [lat, lon] = first.path[Math.floor(first.path.length / 2)]
-    const routes = transit.map((l) => l.route).join('+')
+    const routes = transit.map((l) => routeName(l.route)).join(' + ')
     // Stack pills that sit on the same corridor so the second route stays readable.
     out.push({
       optionId: o.id,

@@ -2,6 +2,7 @@ import type { Db } from '@/src/db/client'
 import type { SearchResponse } from '@/src/contract/schema'
 
 export const MIN_QUERY_LENGTH = 2
+const STOP_LIMIT = 6
 
 const escapeLike = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\${c}`)
 
@@ -13,10 +14,22 @@ export async function searchIndex(db: Db, q: string): Promise<SearchResponse> {
   if (term.length < MIN_QUERY_LENGTH) return { stops: [], routes: [] }
   const like = escapeLike(term)
   const [stops, routes] = await Promise.all([
+    // One row per name: a station's platforms share a name and would otherwise fill every slot.
+    // Stations rank first (LRT names end in "Station", Valley Line ones in "Stop"; not "Station Drive"), then transit
+    // centres, then names that start with what was typed, then the rest.
     db.query<StopRow>(
-      `select stop_id, name, lat, lon from stops
-       where name ilike '%' || $1 || '%' escape '\\'
-       order by name limit 5`,
+      `select stop_id, name, lat, lon from (
+         select distinct on (name) stop_id, name, lat, lon from stops
+         where name ilike '%' || $1 || '%' escape '\\'
+         order by name, stop_id
+       ) s
+       order by case
+         when name ~* '(station|stop)( underground)?$' then 0
+         when name ilike '%transit centre%' then 1
+         when name ilike $1 || '%' escape '\\' then 2
+         else 3
+       end, name
+       limit ${STOP_LIMIT}`,
       [like],
     ),
     db.query<RouteRow>(

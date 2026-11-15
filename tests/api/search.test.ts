@@ -23,4 +23,27 @@ describe('search', () => {
     expect(r.routes.map((x) => x.routeId)).toContain('R9')
     expect(await searchIndex(db, '%%')).toEqual({ stops: [], routes: [] })
   })
+
+  it('lists each name once, stations first, then transit centres, then prefix matches', async () => {
+    const db = await makeTestDb()
+    const rows: [string, string][] = [
+      ['z1', 'Aaa Zed Road'],
+      ['z2', 'Zed Station Drive & 1 Avenue'],
+      ['z3', 'Zed Station'],
+      ['z4', 'Zed Station'],
+      ['z5', 'Zed Transit Centre'],
+      ['z6', 'Zed Stop'],
+    ]
+    for (const [id, name] of rows)
+      await db.query(`insert into stops (stop_id, name, lat, lon) values ($1, $2, 53.5, -113.5)`, [id, name])
+    const r = await searchIndex(db, 'zed')
+    expect(r.stops.map((s) => s.name)).toEqual([
+      'Zed Station',
+      'Zed Stop',
+      'Zed Transit Centre',
+      'Zed Station Drive & 1 Avenue',
+      'Aaa Zed Road',
+    ])
+    expect(r.stops[0].stopId).toBe('z3')
+  })
 })
