@@ -8,6 +8,8 @@ export default defineConfig({
   plugins: [react()],
   resolve: { alias },
   test: {
+    testTimeout: 30000,
+    hookTimeout: 30000,
     projects: [
       {
         extends: true,

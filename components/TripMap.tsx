@@ -17,6 +17,7 @@ type Props = {
 }
 
 const SOURCE = 'lines'
+const RIDE_FILTER: maplibregl.FilterSpecification = ['==', ['get', 'kind'], 'ride']
 const FALLBACK_ATTRIBUTION = '© TomTom'
 const FIT = { padding: 40, animate: false, maxZoom: 16 } as const
 
@@ -114,13 +115,12 @@ export default function TripMap({
     map.on('load', () => {
       const { options, selectedId, showWalking } = latest.current
       map.addSource(SOURCE, { type: 'geojson', data: buildLineFeatures(options, selectedId, showWalking) })
-      const ride = ['==', ['get', 'kind'], 'ride'] as const
       // Literal widths. A data-driven width was collapsing the stroke to a hairline on the basemap.
       map.addLayer({
         id: 'lines-casing',
         type: 'line',
         source: SOURCE,
-        filter: [...ride],
+        filter: RIDE_FILTER,
         layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: { 'line-color': '#111827', 'line-width': 12 },
       })
@@ -128,7 +128,7 @@ export default function TripMap({
         id: 'lines-solid',
         type: 'line',
         source: SOURCE,
-        filter: [...ride],
+        filter: RIDE_FILTER,
         layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: {
           'line-color': ['to-color', ['get', 'color']],
