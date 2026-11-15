@@ -3,3 +3,7 @@ R9,WK,A,Southgate,SH9
 R9,RM,B,,
 RVL,FUT,C,Valley,SHC
 R9,WK,D,Southgate,SH9
+R4,WK,E,Mill Woods,
+RVL,WK,F,Valley Line South,
+R9,WK,G,Southgate,
+R4,WK,H,Mill Woods,

@@ -12,8 +12,8 @@ const opts = { startDate: '2026-11-14', days: 7 }
 describe('transformFeed', () => {
   it('keeps A and D, drops B (removed) and C (outside window)', async () => {
     const r = await transformFeed(open, opts)
-    expect(r.trips.map((t) => t.tripId).sort()).toEqual(['A', 'D'])
-    expect(new Set(r.stopTimes.map((s) => s.tripId))).toEqual(new Set(['A', 'D']))
+    expect(r.trips.map((t) => t.tripId).sort()).toEqual(['A', 'D', 'E', 'F', 'G', 'H'])
+    expect(new Set(r.stopTimes.map((s) => s.tripId))).toEqual(new Set(['A', 'D', 'E', 'F', 'G', 'H']))
     expect(r.serviceDates).toEqual([
       { serviceId: 'WK', date: '2026-11-14' },
       { serviceId: 'WK', date: '2026-11-15' },
@@ -31,7 +31,7 @@ describe('transformFeed', () => {
   it('assigns zones, null when unzoned', async () => {
     const r = await transformFeed(open, opts)
     const z = Object.fromEntries(r.stops.map((s) => [s.stopId, s.zone]))
-    expect(z).toEqual({ '1001': '1EDM', '1002': '1EDM', '1003': '1EDM', '2001': '2STA', '1004': null, '1005': '1EDM', '1006': '1EDM' })
+    expect(z).toEqual({ '1001': '1EDM', '1002': '1EDM', '1003': '1EDM', '2001': '2STA', '1004': null, '1005': '1EDM', '1006': '1EDM', '1007': '1EDM', '1008': '1EDM' })
   })
   it('rounds shape points to 5 decimals', async () => {
     const r = await transformFeed(open, opts)

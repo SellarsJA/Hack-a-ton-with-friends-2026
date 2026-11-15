@@ -6,3 +6,5 @@ stop_id,stop_name,stop_lat,stop_lon
 1004,Unzoned Stop,53.5600,-113.5000
 1005,Southgate LRT Platform,53.4855,-113.5114
 1006,Far Stop,53.4891,-113.5137
+1007,Mill Woods Transit Centre,53.4570,-113.4280
+1008,Valley Line South,53.4620,-113.4500
