@@ -69,6 +69,50 @@ describe('absent protobuf fields', () => {
     expect(s.departure).toBe(2000)
     expect(s.arrival).toBeNull()
   })
+  it('decodes trip start_date as YYYY-MM-DD, null when absent', () => {
+    const withDate = buildLiveIndex({
+      vehicles: empty,
+      tripUpdates: enc([
+        { id: 'a', tripUpdate: { trip: { tripId: 'T1', startDate: '20261114' }, stopTimeUpdate: [] } },
+        { id: 'b', tripUpdate: { trip: { tripId: 'T2' }, stopTimeUpdate: [] } },
+      ]),
+      alerts: empty,
+    })
+    expect(withDate.trips.get('T1')!.startDate).toBe('2026-11-14')
+    expect(withDate.trips.get('T2')!.startDate).toBeNull()
+    const vehicleOnly = buildLiveIndex({
+      vehicles: enc([{ id: 'v', vehicle: { trip: { tripId: 'T3', startDate: '20261115' }, vehicle: { label: '1' } } }]),
+      tripUpdates: empty,
+      alerts: empty,
+    })
+    expect(vehicleOnly.trips.get('T3')!.startDate).toBe('2026-11-15')
+  })
+
+  it('keeps only alerts active at `now` when now is given', () => {
+    const alert = (id: string, activePeriod: object[]) => ({
+      id,
+      alert: {
+        activePeriod,
+        informedEntity: [{ routeId: 'R' }],
+        headerText: { translation: [{ text: id }] },
+      },
+    })
+    const alerts = enc([
+      alert('none', []),
+      alert('future', [{ start: 5000, end: 6000 }]),
+      alert('current', [{ start: 500, end: 1500 }]),
+      alert('open-ended', [{ start: 900 }]),
+      alert('past', [{ end: 999 }]),
+      alert('second-period', [{ start: 100, end: 200 }, { start: 900, end: 1100 }]),
+    ])
+    const i = buildLiveIndex({ vehicles: empty, tripUpdates: empty, alerts }, { now: 1000 })
+    expect(i.alerts.map((a) => a.headline)).toEqual(['none', 'current', 'open-ended', 'second-period'])
+    const all = buildLiveIndex({ vehicles: empty, tripUpdates: empty, alerts })
+    expect(all.alerts).toHaveLength(6)
+    expect(all.alerts[1].activePeriods).toEqual([{ start: 5000, end: 6000 }])
+    expect(all.alerts[3].activePeriods).toEqual([{ start: 900, end: null }])
+  })
+
   it('delay is null when absent everywhere, 0 kept when explicit', () => {
     const none = buildLiveIndex({
       vehicles: empty,

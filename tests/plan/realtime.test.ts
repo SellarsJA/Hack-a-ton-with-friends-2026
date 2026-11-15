@@ -16,9 +16,9 @@ const leg: RealtimeLegInput = {
   alight: { stopId: 'B', seq: 9, arr: ARR },
 }
 
-const liveWith = (trip: TripLive): LiveIndex => ({
+const liveWith = (trip: Omit<TripLive, 'startDate'> & { startDate?: string | null }): LiveIndex => ({
   feedTimestamp: 0,
-  trips: new Map([['t1', trip]]),
+  trips: new Map([['t1', { startDate: null, ...trip }]]),
   alerts: [],
 })
 
@@ -78,6 +78,20 @@ describe('applyRealtime', () => {
     const r = applyRealtime(leg, live)
     expect(r.departEpoch).toBe(depEpoch)
     expect(r.realtime).toBe(false)
+  })
+
+  it('ignores live data for a different service day (startDate mismatch)', () => {
+    const stops = [{ stopSequence: 5, stopId: 'A', arrival: null, departure: depEpoch + 90, delay: 90 }]
+    const vehicle = { label: 'V1', lat: 0, lon: 0, occupancy: null }
+    expect(applyRealtime(leg, liveWith({ startDate: '2026-11-13', stops, vehicle }))).toEqual({
+      departEpoch: depEpoch,
+      arriveEpoch: arrEpoch,
+      realtime: false,
+      vehicleLabel: null,
+      occupancy: null,
+    })
+    expect(applyRealtime(leg, liveWith({ startDate: DATE, stops, vehicle })).realtime).toBe(true)
+    expect(applyRealtime(leg, liveWith({ startDate: null, stops, vehicle })).realtime).toBe(true)
   })
 
   it('falls back to schedule when the trip is absent', () => {

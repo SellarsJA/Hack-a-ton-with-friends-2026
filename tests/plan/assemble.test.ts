@@ -139,9 +139,9 @@ describe('assembleDirectOptions', () => {
       feedTimestamp: 0,
       trips: new Map(),
       alerts: [
-        { headline: 'Detour', routeIds: ['r1'], stopIds: [], tripIds: [] },
-        { headline: 'Detour', routeIds: [], stopIds: ['B'], tripIds: [] },
-        { headline: 'Other', routeIds: ['zzz'], stopIds: [], tripIds: [] },
+        { headline: 'Detour', routeIds: ['r1'], stopIds: [], tripIds: [], activePeriods: [] },
+        { headline: 'Detour', routeIds: [], stopIds: ['B'], tripIds: [], activePeriods: [] },
+        { headline: 'Other', routeIds: ['zzz'], stopIds: [], tripIds: [], activePeriods: [] },
       ],
     }
     const [o] = assembleDirectOptions([cand(1)], ctx(live))

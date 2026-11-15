@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { DateTime } from 'luxon'
 import { getLiveIndex, __resetLiveCacheForTests } from '@/src/live/cache'
+import { buildLiveIndex } from '@/src/live/decode'
+import { ZONE } from '@/src/time/edmonton'
 
 const ok = (f: string) =>
   new Response(new Uint8Array(readFileSync(join(process.cwd(), 'data/snapshot', f))), { status: 200 })
@@ -110,5 +113,25 @@ describe('getLiveIndex', () => {
     const idx = await getLiveIndex(1_000)
     expect(fetchMock).not.toHaveBeenCalled()
     expect(idx!.trips.size).toBeGreaterThan(500)
+  })
+  it('rebases snapshot data to today (Edmonton) when LIVE_SOURCE=snapshot', async () => {
+    process.env.LIVE_SOURCE = 'snapshot'
+    const raw = buildLiveIndex({
+      vehicles: new Uint8Array(readFileSync(join(process.cwd(), 'data/snapshot/VehiclePositions.pb'))),
+      tripUpdates: new Uint8Array(readFileSync(join(process.cwd(), 'data/snapshot/TripUpdates.pb'))),
+      alerts: new Uint8Array(readFileSync(join(process.cwd(), 'data/snapshot/Alerts.pb'))),
+    })
+    const now = DateTime.fromISO('2026-11-20T09:00:00', { zone: ZONE })
+    const idx = (await getLiveIndex(now.toMillis()))!
+    const before = DateTime.fromSeconds(raw.feedTimestamp, { zone: ZONE })
+    const after = DateTime.fromSeconds(idx.feedTimestamp, { zone: ZONE })
+    expect(after.toISODate()).toBe('2026-11-20')
+    expect(after.toFormat('HH:mm:ss')).toBe(before.toFormat('HH:mm:ss'))
+    const dates = new Set([...idx.trips.values()].map((t) => t.startDate).filter((d) => d !== null))
+    expect([...dates]).toEqual(['2026-11-20'])
+    const [id, t] = [...raw.trips].find(([, v]) => v.stops.some((s) => s.arrival !== null))!
+    const s = t.stops.findIndex((x) => x.arrival !== null)
+    expect(idx.trips.get(id)!.stops[s].arrival).toBe(t.stops[s].arrival! + (idx.feedTimestamp - raw.feedTimestamp))
+    expect((idx.feedTimestamp - raw.feedTimestamp) % 86400).toBe(0)
   })
 })

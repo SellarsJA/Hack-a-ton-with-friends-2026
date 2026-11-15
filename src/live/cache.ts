@@ -1,6 +1,9 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { buildLiveIndex, type LiveIndex } from '@/src/live/decode'
+import { DateTime } from 'luxon'
+import { activeAlerts, buildLiveIndex, type LiveIndex } from '@/src/live/decode'
+import { rebaseSnapshot } from '@/src/live/rebase'
+import { ZONE } from '@/src/time/edmonton'
 
 const BASE = 'https://gtfs.edmonton.ca/TMGTFSRealTimeWebService'
 const URLS = {
@@ -27,9 +30,11 @@ async function fetchBuf(url: string): Promise<Uint8Array> {
   return new Uint8Array(await res.arrayBuffer())
 }
 
-async function load(): Promise<LiveIndex> {
+async function load(nowMs: number): Promise<LiveIndex> {
+  const nowSec = Math.floor(nowMs / 1000)
   let bufs: [Uint8Array, Uint8Array, Uint8Array]
-  if (process.env.LIVE_SOURCE === 'snapshot') {
+  const snapshot = process.env.LIVE_SOURCE === 'snapshot'
+  if (snapshot) {
     const read = (f: string) =>
       readFile(join(process.cwd(), 'data/snapshot', f)).then((b) => new Uint8Array(b))
     bufs = await Promise.all([
@@ -44,7 +49,12 @@ async function load(): Promise<LiveIndex> {
       fetchBuf(URLS.alerts),
     ])
   }
-  return buildLiveIndex({ vehicles: bufs[0], tripUpdates: bufs[1], alerts: bufs[2] })
+  const feeds = { vehicles: bufs[0], tripUpdates: bufs[1], alerts: bufs[2] }
+  if (!snapshot) return buildLiveIndex(feeds, { now: nowSec })
+  // A recorded snapshot is replayed as if captured today at the same time of day.
+  const today = DateTime.fromMillis(nowMs, { zone: ZONE }).toISODate()!
+  const rebased = rebaseSnapshot(buildLiveIndex(feeds), today)
+  return { ...rebased, alerts: activeAlerts(rebased.alerts, nowSec) }
 }
 
 export async function getLiveIndex(now: number = Date.now()): Promise<LiveIndex | null> {
@@ -53,7 +63,7 @@ export async function getLiveIndex(now: number = Date.now()): Promise<LiveIndex 
   if (now < nextAttemptAt) return current
   inflight = (async () => {
     try {
-      current = await load()
+      current = await load(now)
       loadedAt = now
       nextAttemptAt = 0
     } catch (err) {

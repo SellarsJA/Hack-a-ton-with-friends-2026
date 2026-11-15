@@ -40,7 +40,9 @@ function resolve(
 export function applyRealtime(c: RealtimeLegInput, live: LiveIndex | null): RealtimeResult {
   const schedDep = toInstant(c.serviceDate, c.board.dep).toSeconds()
   const schedArr = toInstant(c.serviceDate, c.alight.arr).toSeconds()
-  const trip = live?.trips.get(c.tripId)
+  const found = live?.trips.get(c.tripId)
+  // Live data for another service day's run of this trip must not move this one.
+  const trip = found && (found.startDate == null || found.startDate === c.serviceDate) ? found : undefined
   if (!trip) {
     return { departEpoch: schedDep, arriveEpoch: schedArr, realtime: false, vehicleLabel: null, occupancy: null }
   }
