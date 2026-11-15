@@ -4,8 +4,39 @@ import { useEffect, useId, useRef, useState } from 'react'
 import type { Place } from '@/src/tomtom/place'
 import { suggestAddresses } from '@/src/tomtom/suggest'
 import type { SearchResponse } from '@/src/contract/schema'
+import { MODE_COLORS } from '@/src/map/lines'
+import { isStationName } from '@/src/plan/stationName'
+import ModeIcon from './ModeIcon'
 
 const DEBOUNCE_MS = 300
+
+function PinIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden>
+      <path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z" />
+      <circle cx="12" cy="9.5" r="2.5" />
+    </svg>
+  )
+}
+
+/** Icon and word for a suggestion: stations get the train, other stops the bus, addresses a pin. */
+function SuggestionKind({ place }: { place: Place }) {
+  const station = place.kind === 'stop' && isStationName(place.label)
+  const mode = station ? 'rail' : place.kind === 'stop' ? 'bus' : null
+  return (
+    <span className="flex w-16 flex-none items-center gap-1.5 text-xs font-medium uppercase text-zinc-500 dark:text-zinc-400">
+      <span
+        className={`flex h-6 w-6 flex-none items-center justify-center rounded-full ${
+          mode ? 'text-white' : 'bg-zinc-200 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200'
+        }`}
+        style={mode ? { backgroundColor: MODE_COLORS[mode] } : undefined}
+      >
+        {mode ? <ModeIcon mode={mode} className="h-3.5 w-3.5" /> : <PinIcon />}
+      </span>
+      {station ? 'Station' : place.kind === 'stop' ? 'Stop' : 'Place'}
+    </span>
+  )
+}
 
 type Props = {
   label: string
@@ -160,7 +191,7 @@ export default function PlaceField({
                 i === active ? 'bg-zinc-100 dark:bg-zinc-800' : ''
               }`}
             >
-              <span className="text-xs uppercase text-zinc-500">{p.kind === 'stop' ? 'Stop' : 'Place'}</span>
+              <SuggestionKind place={p} />
               <span className="min-w-0 break-words">{p.label}</span>
             </li>
           ))}

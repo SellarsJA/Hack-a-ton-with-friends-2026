@@ -1,11 +1,15 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import PlaceField from './PlaceField'
 import type { Place } from '@/src/tomtom/place'
 
 type Locating = 'pending' | 'done' | 'denied'
+
+// maplibre needs the browser, so the map loads on the client only.
+const HomeMap = dynamic(() => import('./HomeMap'), { ssr: false })
 
 export default function SearchForm() {
   const router = useRouter()
@@ -79,6 +83,7 @@ export default function SearchForm() {
       >
         See options
       </button>
+      <HomeMap start={start} dest={dest} />
     </form>
   )
 }
