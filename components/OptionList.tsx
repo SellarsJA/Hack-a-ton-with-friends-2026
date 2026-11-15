@@ -12,6 +12,7 @@ export default function OptionList({
   onStart,
   riding = false,
   reviewsVersion = 0,
+  onRate,
 }: {
   options: Option[]
   selectedId: string | null
@@ -26,6 +27,8 @@ export default function OptionList({
   /** The rider has started this trip; the start button is replaced by the page's rate bar. */
   riding?: boolean
   reviewsVersion?: number
+  /** Open the rate sheet for the started trip. */
+  onRate?: () => void
 }) {
   return (
     <ul className="flex flex-col gap-3">
@@ -49,6 +52,18 @@ export default function OptionList({
                 className="h-12 rounded-lg bg-blue-700 px-4 font-semibold text-white"
               >
                 Search again
+              </button>
+            )}
+            {/* On a started trip, rating sits right under the card: always in view, never over the steps.
+                No time window, so it works in a demo and after the rider has got off. */}
+            {selected && riding && onRate && (
+              <button
+                type="button"
+                onClick={onRate}
+                className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 font-semibold text-white shadow-sm"
+              >
+                <span aria-hidden>★</span>
+                Ride over? Rate it
               </button>
             )}
             {/* Steps sit directly under the tapped card so they are on screen on a phone. */}

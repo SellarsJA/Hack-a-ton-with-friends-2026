@@ -187,21 +187,8 @@ function Results() {
                   }}
                   riding={riding}
                   reviewsVersion={reviewsVersion}
+                  onRate={() => setRating(true)}
                 />
-                {riding && mergedSelected && (
-                  // Rating is always available on a started trip: no time window, so it works in a demo
-                  // and after the rider has got off.
-                  <div className="sticky bottom-0 -mx-4 mt-auto bg-gradient-to-t from-background via-background to-transparent px-4 pb-2 pt-6">
-                    <button
-                      type="button"
-                      onClick={() => setRating(true)}
-                      className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 font-semibold text-white shadow-lg"
-                    >
-                      <span aria-hidden>★</span>
-                      Ride over? Rate it
-                    </button>
-                  </div>
-                )}
               </>
             )}
           </>

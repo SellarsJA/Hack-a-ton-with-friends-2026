@@ -96,6 +96,9 @@ describe('results page trip mode', () => {
     expect(screen.getByTestId('map').getAttribute('data-count')).toBe('1')
     expect(screen.queryByRole('button', { name: 'Start this trip' })).toBeNull()
 
+    // The rate button sits between the trip card and its steps, never over them.
+    const rate = screen.getByRole('button', { name: /Ride over\? Rate it/ })
+    expect(rate.nextElementSibling?.getAttribute('data-testid')).toBe('option-detail')
     await userEvent.click(screen.getByRole('button', { name: /Ride over\? Rate it/ }))
     const sheet = screen.getByRole('dialog', { name: 'Rate your trip' })
     expect(within(sheet).getByRole('button', { name: 'Send feedback' })).toBeTruthy()
