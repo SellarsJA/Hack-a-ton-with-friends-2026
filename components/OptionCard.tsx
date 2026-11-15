@@ -1,6 +1,7 @@
 import type { Option } from '@/src/contract/schema'
 import { Badge, OCCUPANCY_TEXT, clock } from './format'
 import TransferBadge from './TransferBadge'
+import VehicleSummary from './VehicleSummary'
 
 export const EXPIRED_TEXT = 'This option has left. Search again.'
 
@@ -34,6 +35,7 @@ export default function OptionCard({
             <span>{`Route ${leg.route}`}</span>
             <Badge realtime={leg.realtime} />
             {leg.occupancy && <span>{OCCUPANCY_TEXT[leg.occupancy]}</span>}
+            <VehicleSummary label={leg.vehicleLabel} />
           </span>
         ),
       )}
