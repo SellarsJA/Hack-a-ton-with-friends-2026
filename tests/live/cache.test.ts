@@ -63,6 +63,48 @@ describe('getLiveIndex', () => {
     expect(await getLiveIndex(1_000)).toBeNull()
     expect(warn).toHaveBeenCalledTimes(1)
   })
+  it('backs off after a failure: no fetch within 30s, retries after', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const first = await getLiveIndex(1_000)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    fetchMock.mockImplementation(async () => {
+      throw new Error('boom')
+    })
+    expect(await getLiveIndex(40_000)).toBe(first)
+    const afterFail = fetchMock.mock.calls.length
+    expect(await getLiveIndex(50_000)).toBe(first)
+    expect(fetchMock).toHaveBeenCalledTimes(afterFail)
+    await getLiveIndex(71_000)
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(afterFail)
+    expect(warn).toHaveBeenCalledTimes(2)
+  })
+  it('backs off when nothing has ever loaded', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    fetchMock.mockImplementation(async () => {
+      throw new Error('down')
+    })
+    expect(await getLiveIndex(1_000)).toBeNull()
+    const n = fetchMock.mock.calls.length
+    expect(await getLiveIndex(11_000)).toBeNull()
+    expect(fetchMock).toHaveBeenCalledTimes(n)
+  })
+  it('aborts a hung fetch (5s timeout) and returns the previous index', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const first = await getLiveIndex(1_000)
+    const ctl = new AbortController()
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(ctl.signal)
+    fetchMock.mockImplementation(
+      (_url: string, init: RequestInit) =>
+        new Promise((_res, rej) => {
+          init.signal!.addEventListener('abort', () => rej(new Error('aborted')))
+        }),
+    )
+    const p = getLiveIndex(40_000)
+    ctl.abort()
+    expect(await p).toBe(first)
+    expect(timeout).toHaveBeenCalledWith(5000)
+    expect(warn).toHaveBeenCalledTimes(1)
+  })
   it('reads snapshot files when LIVE_SOURCE=snapshot', async () => {
     process.env.LIVE_SOURCE = 'snapshot'
     const idx = await getLiveIndex(1_000)

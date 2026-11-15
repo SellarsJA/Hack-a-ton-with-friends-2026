@@ -47,6 +47,13 @@ function num(v: unknown): number | null {
   return Number.isFinite(n) ? n : null
 }
 
+/** protobufjs puts defaults on the prototype; only own properties were on the wire. */
+function field(o: object | null | undefined, k: string): unknown {
+  return o && Object.prototype.hasOwnProperty.call(o, k)
+    ? (o as Record<string, unknown>)[k]
+    : null
+}
+
 function uniq(xs: (string | null | undefined)[]): string[] {
   return [...new Set(xs.filter((x): x is string => !!x))]
 }
@@ -73,14 +80,14 @@ export function buildLiveIndex(bufs: {
     if (!u || !tripId) continue
     const t = ensure(tripId)
     for (const s of u.stopTimeUpdate ?? []) {
-      const arrival = num(s.arrival?.time)
-      const departure = num(s.departure?.time)
+      const arrival = num(field(s.arrival, 'time'))
+      const departure = num(field(s.departure, 'time'))
       t.stops.push({
         stopSequence: s.stopSequence ?? 0,
         stopId: s.stopId ?? '',
         arrival: arrival || null,
         departure: departure || null,
-        delay: num(s.departure?.delay) ?? num(s.arrival?.delay),
+        delay: num(field(s.departure, 'delay')) ?? num(field(s.arrival, 'delay')),
       })
     }
     t.stops.sort((a, b) => a.stopSequence - b.stopSequence)
@@ -92,12 +99,12 @@ export function buildLiveIndex(bufs: {
     const tripId = v?.trip?.tripId
     if (!v || !tripId) continue
     const label = v.vehicle?.label || v.vehicle?.id || ''
-    const occ = v.occupancyStatus
+    const occ = num(field(v, 'occupancyStatus'))
     ensure(tripId).vehicle = {
       label,
       lat: v.position?.latitude ?? 0,
       lon: v.position?.longitude ?? 0,
-      occupancy: occ === null || occ === undefined ? null : (OCCUPANCY[occ] ?? null),
+      occupancy: occ === null ? null : (OCCUPANCY[occ] ?? null),
     }
   }
 

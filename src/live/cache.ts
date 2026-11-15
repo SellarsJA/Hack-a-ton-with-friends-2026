@@ -14,13 +14,15 @@ const SNAPSHOT_FILES = {
   alerts: 'Alerts.pb',
 }
 const TTL_MS = 30_000
+const FETCH_TIMEOUT_MS = 5_000
 
 let current: LiveIndex | null = null
 let loadedAt = 0
+let nextAttemptAt = 0
 let inflight: Promise<LiveIndex | null> | null = null
 
 async function fetchBuf(url: string): Promise<Uint8Array> {
-  const res = await fetch(url, { cache: 'no-store' })
+  const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
   if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`)
   return new Uint8Array(await res.arrayBuffer())
 }
@@ -48,11 +50,14 @@ async function load(): Promise<LiveIndex> {
 export async function getLiveIndex(now: number = Date.now()): Promise<LiveIndex | null> {
   if (current && now - loadedAt < TTL_MS) return current
   if (inflight) return inflight
+  if (now < nextAttemptAt) return current
   inflight = (async () => {
     try {
       current = await load()
       loadedAt = now
+      nextAttemptAt = 0
     } catch (err) {
+      nextAttemptAt = now + TTL_MS
       console.warn('[live] refresh failed, using previous index:', err)
     } finally {
       inflight = null
@@ -66,5 +71,6 @@ export async function getLiveIndex(now: number = Date.now()): Promise<LiveIndex 
 export function __resetLiveCacheForTests(): void {
   current = null
   loadedAt = 0
+  nextAttemptAt = 0
   inflight = null
 }
