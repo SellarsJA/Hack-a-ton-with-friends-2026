@@ -70,6 +70,13 @@ describe('planTrip', () => {
     for (const o of r.options) for (const l of o.legs) if (l.mode !== 'walk') expect(l.realtime).toBe(false)
   })
 
+  it('rejecting live index degrades to scheduled options', async () => {
+    const r = await planTrip(from, to, deps({ getLiveIndex: async () => { throw new Error('feed down') } }))
+    expect(PlanResponse.parse(r).options.length).toBeGreaterThan(0)
+    expect(r.liveDataAgeSeconds).toBeNull()
+    for (const o of r.options) for (const l of o.legs) if (l.mode !== 'walk') expect(l.realtime).toBe(false)
+  })
+
   it('computes live data age from feed timestamp', async () => {
     const live: LiveIndex = { feedTimestamp: now.toSeconds() - 30, trips: new Map(), alerts: [] }
     const r = await planTrip(from, to, deps({ getLiveIndex: async () => live }))

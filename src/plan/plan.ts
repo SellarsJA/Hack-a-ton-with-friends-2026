@@ -55,7 +55,10 @@ export async function planTrip(
 
   const [[origin, dest], live] = await Promise.all([
     Promise.all([deps.findNearbyStops(deps.db, from), deps.findNearbyStops(deps.db, to)]),
-    deps.getLiveIndex(),
+    // A live-feed failure must degrade to schedule-only, never fail the plan.
+    Promise.resolve()
+      .then(() => deps.getLiveIndex())
+      .catch(() => null),
   ])
   const liveDataAgeSeconds = live ? Math.max(0, Math.round(nowEpoch - live.feedTimestamp)) : null
   const empty = (emptyReason: NonNullable<PlanResponse['emptyReason']>): PlanResponse => ({
