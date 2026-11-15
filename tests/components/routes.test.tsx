@@ -115,7 +115,8 @@ describe('/routes/[id]', () => {
     expect(screen.getByRole('button', { name: 'Southgate' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Churchill' })).toBeTruthy()
     expect(screen.getByRole('button', { name: /Churchill Station/ })).toBeTruthy()
-    expect(screen.getByText('6:12 PM · Live')).toBeTruthy()
+    await userEvent.click(screen.getByRole('button', { name: /Whyte Ave/ }))
+    expect(await screen.findByText('6:12 PM · Live')).toBeTruthy()
     expect(screen.getByText('6:27 PM · Scheduled')).toBeTruthy()
   })
 
@@ -136,9 +137,26 @@ describe('/routes/[id]', () => {
     await waitFor(() => expect(screen.getByTestId('map').getAttribute('data-selected')).toBe('1003'))
   })
 
-  it('shows the empty copy when there are no departures', async () => {
+  it('asks for a stop before one is chosen, without the no-more-trips copy', async () => {
     await renderDetail(vi.fn(() => json({ ...detailFixture, departures: [] })))
-    expect(screen.getByText('No more trips today from this stop.')).toBeTruthy()
+    expect(screen.getByText('Choose a stop to see the next departures.')).toBeTruthy()
+    expect(screen.queryByText('No more trips today from this stop.')).toBeNull()
+  })
+
+  it('shows the no-more-trips copy for a chosen stop with no departures', async () => {
+    await renderDetail(vi.fn(() => json({ ...detailFixture, departures: [] })))
+    await userEvent.click(screen.getByRole('button', { name: /Whyte Ave/ }))
+    expect(await screen.findByText('No more trips today from this stop.')).toBeTruthy()
+    expect(screen.queryByText('Choose a stop to see the next departures.')).toBeNull()
+  })
+
+  it('says there are no trips today when the route has no patterns', async () => {
+    await renderDetail(vi.fn(() => json({ ...detailFixture, patterns: [], departures: [] })))
+    expect(screen.getByText('No trips on this route today.')).toBeTruthy()
+    expect(screen.queryByText('Stops')).toBeNull()
+    expect(screen.queryByText('Next departures')).toBeNull()
+    expect(screen.queryByText('Choose a stop to see the next departures.')).toBeNull()
+    expect(screen.queryByText('No more trips today from this stop.')).toBeNull()
   })
 
   it('shows Route not found on 404', async () => {

@@ -127,42 +127,50 @@ function RouteScreen({ params }: { params: Promise<{ id: string }> }) {
             ))}
           </div>
         )}
-        <section>
-          <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-400">Stops</h2>
-          <ul>
-            {(pattern?.stops ?? []).map((s) => (
-              <li key={s.stopId}>
-                <button
-                  type="button"
-                  aria-pressed={s.stopId === stopId}
-                  onClick={() => setStopId(s.stopId)}
-                  className={`flex min-h-12 w-full items-center border-b border-zinc-200 py-2 text-left dark:border-zinc-800 ${
-                    s.stopId === stopId ? 'font-bold' : ''
-                  }`}
-                >
-                  {s.name}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-        <section>
-          <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-400">
-            Next departures
-          </h2>
-          {detail.departures.length === 0 ? (
-            <p>No more trips today from this stop.</p>
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {detail.departures.map((d) => (
-                <li key={d.tripId} className="flex flex-wrap items-center gap-2">
-                  <span>{`${clock(d.departAt)} · ${d.realtime ? 'Live' : 'Scheduled'}`}</span>
-                  <span className="text-sm text-zinc-600 dark:text-zinc-400">{d.headsign}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        {detail.patterns.length === 0 ? (
+          <p>No trips on this route today.</p>
+        ) : (
+          <>
+            <section>
+              <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-400">Stops</h2>
+              <ul>
+                {(pattern?.stops ?? []).map((s) => (
+                  <li key={s.stopId}>
+                    <button
+                      type="button"
+                      aria-pressed={s.stopId === stopId}
+                      onClick={() => setStopId(s.stopId)}
+                      className={`flex min-h-12 w-full items-center border-b border-zinc-200 py-2 text-left dark:border-zinc-800 ${
+                        s.stopId === stopId ? 'font-bold' : ''
+                      }`}
+                    >
+                      {s.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+            <section>
+              <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-400">
+                Next departures
+              </h2>
+              {stopId === null ? (
+                <p>Choose a stop to see the next departures.</p>
+              ) : detail.departures.length === 0 ? (
+                <p>No more trips today from this stop.</p>
+              ) : (
+                <ul className="flex flex-col gap-2">
+                  {detail.departures.map((d) => (
+                    <li key={d.tripId} className="flex flex-wrap items-center gap-2">
+                      <span>{`${clock(d.departAt)} · ${d.realtime ? 'Live' : 'Scheduled'}`}</span>
+                      <span className="text-sm text-zinc-600 dark:text-zinc-400">{d.headsign}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </>
+        )}
       </div>
     </main>
   )
