@@ -22,6 +22,7 @@ export const SCHEDULE_TABLES = [
   'stop_times',
   'shapes',
   'feed_meta',
+  'stop_links',
 ] as const
 
 /**
@@ -72,6 +73,7 @@ export async function load(sql: Sql, f: FeedRows): Promise<Record<string, number
       f.stopTimes.map((s) => [s.tripId, s.stopSequence, s.stopId, s.arr, s.dep]),
     ],
     shapes: [['shape_id', 'points'], f.shapes.map((s) => [s.shapeId, s.points])],
+    stop_links: [['from_stop', 'to_stop', 'walk_s'], f.stopLinks.map((l) => [l.fromStop, l.toStop, l.walkS])],
     feed_meta: [
       ['feed_version', 'window_start', 'window_end'],
       [[f.feedMeta.feedVersion, f.feedMeta.windowStart, f.feedMeta.windowEnd]],

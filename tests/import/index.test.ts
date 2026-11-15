@@ -12,6 +12,7 @@ describe('import-gtfs index', () => {
       'stop_times',
       'shapes',
       'feed_meta',
+      'stop_links',
     ])
   })
 })

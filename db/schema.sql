@@ -8,3 +8,5 @@ create table if not exists stop_times (trip_id text not null, stop_sequence int 
 create index if not exists stop_times_stop_dep on stop_times (stop_id, dep);
 create table if not exists shapes (shape_id text primary key, points jsonb not null); -- [[lat,lon],...], 5 decimals
 create table if not exists feed_meta (feed_version text, window_start date, window_end date, imported_at timestamptz default now());
+create table if not exists stop_links (from_stop text not null, to_stop text not null, walk_s int not null, primary key (from_stop, to_stop));
+create index if not exists stop_links_to on stop_links (to_stop);

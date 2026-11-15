@@ -1,6 +1,7 @@
 import { parse } from 'csv-parse'
 import { DateTime } from 'luxon'
 import { parseGtfsTime } from '../../src/time/edmonton'
+import { distanceMeters, walkMinutes } from '../../src/geo/geo'
 
 export type OpenFn = (name: string) => Promise<NodeJS.ReadableStream | null>
 
@@ -25,6 +26,7 @@ export interface FeedRows {
   stopTimes: { tripId: string; stopSequence: number; stopId: string; arr: number; dep: number }[]
   shapes: { shapeId: string; points: [number, number][] }[]
   feedMeta: { feedVersion: string | null; windowStart: string; windowEnd: string }
+  stopLinks: { fromStop: string; toStop: string; walkS: number }[]
 }
 
 type Rec = Record<string, string>
@@ -47,6 +49,49 @@ const round5 = (n: number) => Math.round(n * 1e5) / 1e5
 
 function isoDate(yyyymmdd: string): string {
   return `${yyyymmdd.slice(0, 4)}-${yyyymmdd.slice(4, 6)}-${yyyymmdd.slice(6, 8)}`
+}
+
+/**
+ * Every stop linked to itself (0 s) plus both directions of each pair within radiusM,
+ * walkS = walkMinutes(d) * 60. Stops are bucketed into ~radiusM grid cells; only
+ * neighbouring cells are compared.
+ */
+export function stopLinks(
+  stops: { stopId: string; lat: number; lon: number }[],
+  radiusM = 250,
+): { fromStop: string; toStop: string; walkS: number }[] {
+  const latStep = radiusM / 111_195
+  const meanLat = stops.length ? stops.reduce((a, s) => a + s.lat, 0) / stops.length : 0
+  const lonStep = latStep / Math.max(Math.cos((meanLat * Math.PI) / 180), 0.01)
+  const cell = (s: { lat: number; lon: number }): [number, number] => [
+    Math.floor(s.lat / latStep),
+    Math.floor(s.lon / lonStep),
+  ]
+  const grid = new Map<string, number[]>()
+  stops.forEach((s, i) => {
+    const [r, c] = cell(s)
+    const k = `${r},${c}`
+    const list = grid.get(k)
+    if (list) list.push(i)
+    else grid.set(k, [i])
+  })
+  const out: { fromStop: string; toStop: string; walkS: number }[] = []
+  stops.forEach((s, i) => {
+    out.push({ fromStop: s.stopId, toStop: s.stopId, walkS: 0 })
+    const [r, c] = cell(s)
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        for (const j of grid.get(`${r + dr},${c + dc}`) ?? []) {
+          if (j === i) continue
+          const o = stops[j]
+          if (o.stopId === s.stopId) continue
+          const d = distanceMeters(s, o)
+          if (d <= radiusM) out.push({ fromStop: s.stopId, toStop: o.stopId, walkS: walkMinutes(d) * 60 })
+        }
+      }
+    }
+  })
+  return out
 }
 
 export async function transformFeed(
@@ -175,5 +220,6 @@ export async function transformFeed(
     stopTimes,
     shapes,
     feedMeta: { feedVersion, windowStart, windowEnd },
+    stopLinks: stopLinks(stops),
   }
 }

@@ -4,3 +4,5 @@ stop_id,stop_name,stop_lat,stop_lon
 1003,Whyte Ave & 104 St,53.5185,-113.4975
 2001,St. Albert Exchange,53.6305,-113.6256
 1004,Unzoned Stop,53.5600,-113.5000
+1005,Southgate LRT Platform,53.4855,-113.5114
+1006,Far Stop,53.4891,-113.5137

@@ -37,6 +37,7 @@ export async function makeTestDb(): Promise<Db> {
   await insertRows(pg, 'stop_times', ['trip_id', 'stop_sequence', 'stop_id', 'arr', 'dep'], f.stopTimes.map((s) => [s.tripId, s.stopSequence, s.stopId, s.arr, s.dep]))
   await insertRows(pg, 'shapes', ['shape_id', 'points'], f.shapes.map((s) => [s.shapeId, JSON.stringify(s.points)]))
   await insertRows(pg, 'feed_meta', ['feed_version', 'window_start', 'window_end'], [[f.feedMeta.feedVersion, f.feedMeta.windowStart, f.feedMeta.windowEnd]])
+  await insertRows(pg, 'stop_links', ['from_stop', 'to_stop', 'walk_s'], f.stopLinks.map((l) => [l.fromStop, l.toStop, l.walkS]))
   return {
     async query<T = Record<string, unknown>>(text: string, params?: unknown[]) {
       return (await pg.query<T>(text, params)).rows
