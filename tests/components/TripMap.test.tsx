@@ -1,9 +1,12 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, cleanup } from '@testing-library/react'
+import { render, cleanup, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import fixture from '@/fixtures/plan.json'
 import { PlanResponse } from '@/src/contract/schema'
 
 const fitBounds = vi.fn()
+const addLayer = vi.fn()
+const setLayoutProperty = vi.fn()
 
 vi.mock('maplibre-gl', () => {
   class Map {
@@ -13,7 +16,11 @@ vi.mock('maplibre-gl', () => {
       if (type === 'load') cb()
     }
     addSource() {}
-    addLayer() {}
+    addLayer = addLayer
+    setLayoutProperty = setLayoutProperty
+    getLayer(id: string) {
+      return addLayer.mock.calls.some(([l]) => l.id === id) ? {} : undefined
+    }
     addControl() {}
     removeControl() {}
     remove() {}
@@ -56,6 +63,8 @@ afterEach(() => {
   vi.unstubAllEnvs()
   vi.unstubAllGlobals()
   fitBounds.mockReset()
+  addLayer.mockReset()
+  setLayoutProperty.mockReset()
 })
 
 describe('TripMap', () => {
@@ -88,5 +97,27 @@ describe('TripMap', () => {
     expect(document.querySelector('[data-role="destination"]')?.getAttribute('aria-label')).toBe(
       'destination: Southgate Station',
     )
+  })
+
+  it('adds live traffic under the trip lines, hidden until the Traffic button is pressed', async () => {
+    vi.stubEnv('NEXT_PUBLIC_TOMTOM_KEY', 'k1')
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})))
+    const plan = PlanResponse.parse(fixture)
+    render(<TripMap options={plan.options} selectedId={plan.options[0].id} showWalking onSelect={() => {}} />)
+    const ids = addLayer.mock.calls.map(([l]) => l.id)
+    expect(ids.indexOf('traffic-flow')).toBeGreaterThanOrEqual(0)
+    expect(ids.indexOf('traffic-flow')).toBeLessThan(ids.indexOf('lines-solid'))
+    const traffic = addLayer.mock.calls.find(([l]) => l.id === 'traffic-flow')![0]
+    expect(traffic.layout.visibility).toBe('none')
+    expect(screen.queryByTestId('traffic-legend')).toBeNull()
+
+    const button = screen.getByRole('button', { name: 'Traffic' })
+    expect(button.getAttribute('aria-pressed')).toBe('false')
+    await userEvent.click(button)
+    expect(button.getAttribute('aria-pressed')).toBe('true')
+    expect(setLayoutProperty).toHaveBeenLastCalledWith('traffic-flow', 'visibility', 'visible')
+    expect(screen.getByTestId('traffic-legend').textContent).toContain('Slow')
+    await userEvent.click(button)
+    expect(setLayoutProperty).toHaveBeenLastCalledWith('traffic-flow', 'visibility', 'none')
   })
 })
