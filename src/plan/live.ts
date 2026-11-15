@@ -6,6 +6,10 @@ import { decodeLiveKey, type LiveKeyLeg } from '@/src/plan/liveKey'
 import { applyRealtime, type RealtimeResult } from '@/src/plan/realtime'
 import { transferStatus } from '@/src/plan/transfer'
 
+export class BadLiveKeyError extends Error {}
+
+let warnedFallback = false
+
 export type RefreshDeps = { nextDepartures: NextDeparturesFn }
 
 function legInput(l: LiveKeyLeg) {
@@ -30,8 +34,12 @@ export async function refreshOptions(
   return Promise.all(
     keys.map(async (liveKey): Promise<LiveOption> => {
       const payload = decodeLiveKey(liveKey)
-      if (!payload) throw new Error('bad live key')
+      if (!payload) throw new BadLiveKeyError('bad live key')
       const rts: RealtimeResult[] = payload.legs.map((l) => applyRealtime(legInput(l), live))
+      // Defence in depth: a non-finite epoch would serialise as null and poison transfer maths.
+      if (rts.some((rt) => !Number.isFinite(rt.departEpoch) || !Number.isFinite(rt.arriveEpoch))) {
+        throw new BadLiveKeyError('non-finite epoch')
+      }
       const legs = rts.map((rt, i) => ({
         tripId: payload.legs[i].t,
         departAt: iso(rt.departEpoch),
@@ -50,14 +58,21 @@ export async function refreshOptions(
         const status = transferStatus(r1.arriveEpoch, r2.departEpoch, payload.tw, bothLive)
         let fallbackDepartAt: string | null = null
         if (status.status === 'at_risk') {
-          const next = await deps.nextDepartures({
-            stopId: b.bs,
-            routeId: b.r,
-            afterEpoch: r1.arriveEpoch + payload.tw,
-            limit: 1,
-            live,
-          })
-          fallbackDepartAt = next.length > 0 ? iso(next[0].departEpoch) : null
+          try {
+            const next = await deps.nextDepartures({
+              stopId: b.bs,
+              routeId: b.r,
+              afterEpoch: r1.arriveEpoch + payload.tw,
+              limit: 1,
+              live,
+            })
+            fallbackDepartAt = next.length > 0 ? iso(next[0].departEpoch) : null
+          } catch (err) {
+            if (!warnedFallback) {
+              warnedFallback = true
+              console.warn('[live] fallback departure lookup failed:', err)
+            }
+          }
         }
         transfer = { stop: b.bs, ...status, fallbackDepartAt }
       }

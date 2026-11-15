@@ -45,6 +45,19 @@ describe('liveKey', () => {
     expect(decodeLiveKey(enc({ legs: [leg, leg], tw: 120 }))).not.toBeNull()
   })
 
+  it('rejects impossible dates, huge or inverted times and huge walks', () => {
+    const enc = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('base64url')
+    const one = (l: Record<string, unknown>) => enc({ legs: [{ ...leg, ...l }], tw: null })
+    expect(decodeLiveKey(one({ d: '2026-99-99' }))).toBeNull()
+    expect(decodeLiveKey(one({ d: '2026-02-30' }))).toBeNull()
+    expect(decodeLiveKey(one({ bt: 1e13, at: 1e13 }))).toBeNull()
+    expect(decodeLiveKey(one({ at: 172801 }))).toBeNull()
+    expect(decodeLiveKey(one({ bt: 172800, at: 172800 }))).not.toBeNull()
+    expect(decodeLiveKey(one({ bt: 66000, at: 65400 }))).toBeNull()
+    expect(decodeLiveKey(enc({ legs: [leg, leg], tw: 99999 }))).toBeNull()
+    expect(decodeLiveKey(enc({ legs: [leg, leg], tw: 3600 }))).not.toBeNull()
+  })
+
   it('rejects keys longer than 1024 characters before decoding', () => {
     expect(decodeLiveKey('A'.repeat(1025))).toBeNull()
   })

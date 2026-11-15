@@ -33,6 +33,13 @@ export function dbVehicleLookups(db: Db): { tripRoute: TripRouteFn; routeNames: 
   }
 }
 
+const warned = new Set<string>()
+function warnOnce(kind: string, err: unknown): void {
+  if (warned.has(kind)) return
+  warned.add(kind)
+  console.warn(`[live] ${kind} lookup failed:`, err)
+}
+
 /**
  * Live vehicles currently serving any of `routeIds`. A vehicle's own route id is used when the feed
  * carries one; otherwise `tripRoute` resolves it from the trips table.
@@ -57,7 +64,11 @@ export async function vehiclesForRoutes(
     }
   }
   if (unknown.length > 0) {
-    const lookup = await tripRoute(unknown.map(([id]) => id))
+    // A failed lookup drops only the vehicles whose route is unknown.
+    const lookup = await tripRoute(unknown.map(([id]) => id)).catch((err) => {
+      warnOnce('trip route', err)
+      return new Map<string, string>()
+    })
     for (const [tripId, v] of unknown) {
       const routeId = lookup.get(tripId)
       if (routeId && wanted.has(routeId)) found.push({ tripId, routeId, v })
@@ -65,7 +76,10 @@ export async function vehiclesForRoutes(
   }
   if (found.length === 0) return []
 
-  const names = await routeNames([...new Set(found.map((f) => f.routeId))])
+  const names = await routeNames([...new Set(found.map((f) => f.routeId))]).catch((err) => {
+    warnOnce('route names', err)
+    return new Map<string, string>()
+  })
   const seen = new Set<string>()
   const out: Vehicle[] = []
   for (const { tripId, routeId, v } of found) {

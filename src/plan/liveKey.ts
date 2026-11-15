@@ -1,5 +1,7 @@
+import { DateTime } from 'luxon'
 import { z } from 'zod'
 import type { Candidate } from '@/src/plan/query'
+import { ZONE } from '@/src/time/edmonton'
 
 export type LiveKeyLeg = {
   t: string // tripId
@@ -18,22 +20,28 @@ export type LiveKeyPayload = { legs: LiveKeyLeg[]; tw: number | null }
 
 const id = z.string().min(1).max(64)
 const nat = z.number().int().min(0)
+// GTFS times may pass midnight; 48 h is a generous upper bound.
+const gtfsSeconds = nat.max(172800)
 const Leg = z
   .object({
     t: id,
-    d: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    d: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .refine((d) => DateTime.fromISO(d, { zone: ZONE }).isValid),
     bs: id,
     bq: nat,
-    bt: nat,
+    bt: gtfsSeconds,
     as: id,
     aq: nat,
-    at: nat,
+    at: gtfsSeconds,
     r: id,
     rail: z.boolean(),
   })
   .strict()
+  .refine((l) => l.at >= l.bt)
 const Payload = z
-  .object({ legs: z.array(Leg).min(1).max(2), tw: nat.nullable() })
+  .object({ legs: z.array(Leg).min(1).max(2), tw: nat.max(3600).nullable() })
   .strict()
   .refine((p) => (p.legs.length === 1 ? p.tw === null : p.tw !== null))
 
