@@ -4,7 +4,7 @@ Run by hand with the team's own Vercel, Neon and TomTom accounts.
 
 Environment variables: `DATABASE_URL`, `NEXT_PUBLIC_TOMTOM_KEY`, `LIVE_SOURCE` (`city` by default, or `snapshot`).
 
-**`npm run db:migrate` is the same script as `db:schema`: it applies `db/schema.sql` and then `db/feedback.sql` (the `profiles`, `feedback` and `predictions` tables). Every statement is idempotent, and the GTFS import never truncates the feedback tables. Existing `db:schema` steps below remain valid.**
+**`db:migrate` is the same script as `db:schema` (it also applies `db/feedback.sql`), so the `db:schema` steps below remain valid. See section 6 for the tier 3 details.**
 
 **The scripts (`db:schema`, `import-gtfs`) do not load `.env.local`.** Pass the variable on the command line as shown below, or run the script with Node's env-file flag, e.g. `npx tsx --env-file=.env.local scripts/import-gtfs/index.ts`.
 
@@ -100,6 +100,32 @@ Tick each item on a phone, on mobile data, against the deployed site.
 - [ ] **8. Tab bar, footer.** Scroll to the very bottom of any page. The footer's licence text is visible above the tab bar.
 - [ ] **9. Transfer card.** On a transfer option, tap the card. The badge shows On track, Tight or At risk, and an LRT transfer shows "Train side uses the schedule".
 - [ ] **10. Bus popup.** Tap a bus dot on the map. A popup shows the bus number and crowding when it's known.
+
+## 6. Tier 3 deploy and phone walkthrough
+
+Ride feedback adds the `profiles`, `feedback` and `predictions` tables. Run by hand; tick each item.
+
+**Order matters: migrate production *before* the tier 3 code deploys.** `npm run db:migrate` is the same script as `db:schema`: it applies `db/schema.sql` and then `db/feedback.sql`. Every statement is idempotent, and the GTFS import never truncates the feedback tables.
+
+- [ ] **1. Migrate production, twice.** The second run must be a no-op with no errors.
+  - bash: `DATABASE_URL='<prod>' npm run db:migrate`
+  - PowerShell: `$env:DATABASE_URL="<prod>"; npm run db:migrate`
+  - Smoke check in the Neon SQL editor; all three must succeed: `select count(*) from profiles; select count(*) from feedback; select count(*) from predictions;`
+- [ ] **2. Deploy.** `npm test` passes, push, and the Vercel deploy succeeds.
+- [ ] **3. Open the Vercel https URL on the phone**, not a LAN `http://` address. The `rid` cookie is `Secure`, so the browser does not store it over plain http on a LAN IP.
+- [ ] **4. Plan a trip departing within 2 minutes.** The button `I'm on bus <label>` appears on the selected option. Leave the results page open for the next check.
+- [ ] **5. Submit feedback.** Stars 4, time slider at 5, `Too full`. The page shows `Thanks! Your feedback is saved. You can change it until the end of the day.`
+- [ ] **6. Resubmit.** Reopen the same link, change stars to 3 and resubmit. In Neon, `select count(*) from feedback;` is unchanged.
+- [ ] **7. Check the summary.** Back on results, the card shows `★ 3.0 (1) · 1 too full this month`.
+- [ ] **8. Clear site data and reload.** A new `rid` cookie is set, and the previous rating still counts in the summary.
+- [ ] **9. Neon smoke check of tracking.** About 1 minute after planning (results page still open), run `select count(*) from predictions where latest_epoch is not null;`. Expect 1 or more while a live trip is in progress. Neon array parameters were only tested on PGlite. If it stays 0 and the Vercel logs show `[accuracy]` warnings, that is the cause.
+- [ ] **10. After 30 minutes, open `/stats`.** `/stats` is not linked from the app; open it by URL. It shows the headings `What riders told us` and `What we measured`, with `count ≥ 1` under `What we measured`.
+  - Measured accuracy is skipped when `LIVE_SOURCE=snapshot`, so `/stats` stays empty in snapshot demos by design. Production must not set `LIVE_SOURCE=snapshot` if you want measured stats.
+- [ ] **11. Visual checks on the phone.** The `/ride` page at a narrow width has no horizontal scroll. The slider thumb is large and easy to grab, the focus outline is visible, and it works in both light and dark mode.
+- [ ] **12. Re-import.** Run the import against production once more, and confirm the section 1, step 6 summary is unchanged.
+  - bash: `DATABASE_URL='<prod>' npm run import-gtfs`
+  - PowerShell: `$env:DATABASE_URL="<prod>"; npm run import-gtfs`
+- [ ] **13. Record the results in the PR description.**
 
 ## Notes
 
