@@ -35,6 +35,6 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/|favicon\.ico|maplibre-gl-worker\.js|.*\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
+    '/((?!_next/|favicon[.]ico|maplibre-gl-worker[.]js|.*[.](?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
   ],
 }

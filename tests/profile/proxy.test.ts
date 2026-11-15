@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { NextRequest } from 'next/server'
+import { unstable_doesMiddlewareMatch } from 'next/experimental/testing/server'
 import { proxy, config } from '../../proxy'
 import { getProfileId, isValidProfileId, PROFILE_COOKIE } from '../../src/profile/profile'
 
@@ -40,9 +41,11 @@ describe('proxy profile cookie', () => {
     expect(res.headers.get('x-middleware-request-cookie')).toContain(minted)
   })
 
-  it('excludes next internals and static files in the matcher', () => {
-    expect(config.matcher[0]).toContain('_next')
-    expect(config.matcher[0]).toContain('maplibre-gl-worker.js')
+  it('matches pages and api but not internals or static files', () => {
+    const m = (url: string) => unstable_doesMiddlewareMatch({ config, url })
+    for (const u of ['/', '/ride', '/api/feedback', '/stats', '/foo-png']) expect(m(u), u).toBe(true)
+    for (const u of ['/_next/static/a.js', '/favicon.ico', '/logo.png', '/maplibre-gl-worker.js'])
+      expect(m(u), u).toBe(false)
   })
 })
 
