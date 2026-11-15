@@ -31,6 +31,19 @@ describe('findNearbyStops', () => {
   it('returns [] when no stops are in range', async () => {
     expect(await findNearbyStops(db, { lat: 53.4, lon: -113.3 })).toEqual([])
   })
+
+  it('returns every stop inside the walk radius, not only the nearest 30', async () => {
+    const lat = 53.6
+    const lon = -113.4
+    const values = Array.from({ length: 40 }, (_, i) => {
+      const dLat = (i * 12) / 111320
+      return `('cap-${i}', 'Cap ${i}', ${lat + dLat}, ${lon}, '1EDM')`
+    }).join(',')
+    await db.query(`insert into stops (stop_id, name, lat, lon, zone) values ${values}`)
+    const stops = await findNearbyStops(db, { lat, lon })
+    expect(stops.filter((s) => s.stopId.startsWith('cap-'))).toHaveLength(40)
+    expect(stops[0].stopId).toBe('cap-0')
+  })
 })
 
 describe('findDirectCandidates', () => {

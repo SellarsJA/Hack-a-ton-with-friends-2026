@@ -25,8 +25,6 @@ export type Candidate = {
   alight: NearbyStop & { seq: number; arr: number }
 }
 
-const MAX_NEARBY = 30
-
 export async function findNearbyStops(db: Db, p: LatLng, radiusM = 800): Promise<NearbyStop[]> {
   const b = boundingBox(p, radiusM)
   const rows = await db.query<{
@@ -54,9 +52,10 @@ export async function findNearbyStops(db: Db, p: LatLng, radiusM = 800): Promise
         walkSeconds: walkMinutes(distanceM) * 60,
       }
     })
+    // No nearest-N cap. Downtown has 30 stops inside ~210 m, and that cutoff
+    // was dropping direct buses whose stop is still inside the 800 m walk.
     .filter((s) => s.distanceM <= radiusM)
     .sort((a, b) => a.distanceM - b.distanceM)
-    .slice(0, MAX_NEARBY)
 }
 
 const DIRECT_SQL = `
