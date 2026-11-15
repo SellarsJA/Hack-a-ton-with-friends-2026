@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { scheduleTrack } from '@/src/accuracy/after'
 import type { LiveResponse } from '@/src/contract/schema'
 import { getDb, type Db } from '@/src/db/client'
 import { getLiveIndex } from '@/src/live/cache'
@@ -50,6 +51,7 @@ export async function GET(request: NextRequest) {
       options,
       vehicles,
     }
+    scheduleTrack(live, nowEpoch)
     return NextResponse.json(body, { headers })
   } catch (err) {
     if (err instanceof BadLiveKeyError) return NextResponse.json({ error: 'bad_key' }, { status: 400, headers })
