@@ -79,22 +79,21 @@ describe('assembleTransferOptions', () => {
     expect(o.transfer!.fallbackDepartAt).toBeNull()
   })
 
-  it('a rail leg forces basedOn scheduled even when the bus is live', async () => {
-    const c = tc({ type2: 0 })
-    const live: LiveIndex = {
-      feedTimestamp: 0, alerts: [],
-      trips: new Map([['t1', { startDate: DATE, stops: [{ stopId: 'A', stopSequence: 1, arrival: null, departure: null, delay: 0 }], vehicle: null }]]),
+  const mkTrip = (id: string, seq: number, stopId: string): [string, TripLive] => [id, { startDate: DATE, stops: [{ stopId, stopSequence: seq, arrival: null, departure: null, delay: 0 }], vehicle: null }]
+  const bothLive = (): LiveIndex => ({ feedTimestamp: 0, alerts: [], trips: new Map([mkTrip('t1', 1, 'A'), mkTrip('t2', 2, 'Y')]) })
+
+  it('a rail leg forces basedOn scheduled even when both legs are realtime', async () => {
+    for (const o of [{ type2: 0 }, { type1: 1 }]) {
+      const [opt] = await assembleTransferOptions([tc(o)], ctx(bothLive()))
+      const transit = opt.legs.filter((l) => l.mode !== 'walk')
+      expect(transit.every((l) => l.mode !== 'walk' && l.realtime)).toBe(true)
+      expect(opt.legs.filter((l) => l.mode === 'rail')).toHaveLength(1)
+      expect(opt.transfer!.basedOn).toBe('scheduled')
     }
-    const [o] = await assembleTransferOptions([c], ctx(live))
-    expect(o.transfer!.basedOn).toBe('scheduled')
-    expect(o.legs.filter((l) => l.mode === 'rail')).toHaveLength(1)
   })
 
   it('basedOn is live when both bus legs are realtime', async () => {
-    const c = tc()
-    const mkTrip = (id: string, seq: number, stopId: string): [string, TripLive] => [id, { startDate: DATE, stops: [{ stopId, stopSequence: seq, arrival: null, departure: null, delay: 0 }], vehicle: null }]
-    const live: LiveIndex = { feedTimestamp: 0, alerts: [], trips: new Map([mkTrip('t1', 1, 'A'), mkTrip('t2', 2, 'Y')]) }
-    const [o] = await assembleTransferOptions([c], ctx(live))
+    const [o] = await assembleTransferOptions([tc()], ctx(bothLive()))
     expect(o.transfer!.basedOn).toBe('live')
   })
 
