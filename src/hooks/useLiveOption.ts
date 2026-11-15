@@ -7,15 +7,26 @@ import { ZONE } from '@/src/time/edmonton'
 
 export const LIVE_POLL_MS = 30_000
 
-type LiveState = { data: LiveOption | null; vehicles: Vehicle[]; ageSeconds: number | null }
-const EMPTY: LiveState = { data: null, vehicles: [], ageSeconds: null }
+type LiveState = {
+  data: LiveOption | null
+  vehicles: Vehicle[]
+  /** Server-reported age plus the time since that response arrived, so it keeps growing through failed polls. */
+  ageSeconds: number | null
+  /** Epoch ms of the latest finished poll tick, successful or not; 0 before the first one. */
+  now: number
+}
+const EMPTY: LiveState = { data: null, vehicles: [], ageSeconds: null, now: 0 }
+
+type Received = { data: LiveOption; vehicles: Vehicle[]; serverAge: number | null; receivedAt: number }
 
 /**
  * Polls /api/live for one option. Pauses while the page is hidden and fetches
- * at once when it becomes visible again. A failed poll keeps the previous data.
+ * at once when it becomes visible again. A failed poll keeps the previous data
+ * but still re-renders, so the reported age keeps growing.
  */
 export function useLiveOption(liveKey: string | null): LiveState {
-  const [state, setState] = useState<{ key: string; value: LiveState } | null>(null)
+  const [state, setState] = useState<{ key: string; value: Received } | null>(null)
+  const [now, setNow] = useState(0)
 
   useEffect(() => {
     if (!liveKey) return
@@ -37,10 +48,13 @@ export function useLiveOption(liveKey: string | null): LiveState {
         if (!data) return
         setState({
           key: liveKey,
-          value: { data, vehicles: parsed.data.vehicles, ageSeconds: parsed.data.liveDataAgeSeconds },
+          value: { data, vehicles: parsed.data.vehicles, serverAge: parsed.data.liveDataAgeSeconds, receivedAt: Date.now() },
         })
       } catch {
         // A failed poll keeps what we already have.
+      } finally {
+        // Every finished tick re-renders, so age and expiry advance even when the poll failed.
+        if (!mine.signal.aborted) setNow(Date.now())
       }
     }
     const stop = () => {
@@ -72,8 +86,16 @@ export function useLiveOption(liveKey: string | null): LiveState {
 
   if (!liveKey || !state) return EMPTY
   // Keep the last vehicles across a key change so the dots do not flicker off.
-  if (state.key !== liveKey) return { data: null, vehicles: state.value.vehicles, ageSeconds: null }
-  return state.value
+  if (state.key !== liveKey) return { data: null, vehicles: state.value.vehicles, ageSeconds: null, now }
+  const { data, vehicles, serverAge, receivedAt } = state.value
+  const ageSeconds = serverAge === null ? null : serverAge + Math.max(0, now - receivedAt) / 1000
+  return { data, vehicles, ageSeconds, now }
+}
+
+/** True once the option's first transit leg has departed, judged on the client clock. */
+export function hasLeft(option: Option, nowMs: number): boolean {
+  const first = option.legs.find((l) => l.mode !== 'walk')
+  return first !== undefined && DateTime.fromISO(first.departAt).toMillis() < nowMs
 }
 
 const shiftIso = (iso: string, ms: number) =>

@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { PlanResponse } from '@/src/contract/schema'
 import { parseLatLng } from '@/src/geo/geo'
-import { mergeLive, useLiveOption } from '@/src/hooks/useLiveOption'
+import { hasLeft, mergeLive, useLiveOption } from '@/src/hooks/useLiveOption'
 import LiveBanner from '@/components/LiveBanner'
 import OptionList from '@/components/OptionList'
 
@@ -70,7 +70,11 @@ function Results() {
         : (plan?.options ?? []),
     [plan, selected, live.data],
   )
-  const mapVehicles = live.data ? live.vehicles : (plan?.vehicles ?? [])
+  // Keep the last live vehicles while a new selection loads (R18), rather than jumping back to plan time.
+  const mapVehicles = live.vehicles.length > 0 ? live.vehicles : (plan?.vehicles ?? [])
+  // The server's expired flag can lag (failed polls), so also check the merged first departure locally.
+  const mergedSelected = displayed.find((o) => o.id === selectedId) ?? null
+  const expired = live.data !== null && (live.data.expired || (mergedSelected !== null && hasLeft(mergedSelected, live.now)))
 
   if (!valid) {
     return (
@@ -141,7 +145,7 @@ function Results() {
                   options={displayed}
                   selectedId={selectedId}
                   onSelect={setSelectedId}
-                  expired={live.data?.expired ?? false}
+                  expired={expired}
                   onSearchAgain={retry}
                 />
               </>

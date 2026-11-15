@@ -110,6 +110,25 @@ describe('useLiveOption', () => {
     expect(result.current.data?.liveKey).toBe('k-opt-2')
   })
 
+  it('ages the data through failed polls: 25 s then 4 failures is over 120 s', async () => {
+    const f = vi
+      .fn((..._a: unknown[]): Promise<unknown> => Promise.reject(new Error('net')))
+      .mockImplementationOnce(() => okRes({ ...liveFixture, liveDataAgeSeconds: 25 }))
+      .mockImplementationOnce(() => Promise.resolve({ ok: false, json: () => Promise.resolve({}) }))
+    vi.stubGlobal('fetch', f)
+    const { result } = renderHook(() => useLiveOption('k-opt-2'))
+    await act(async () => {})
+    expect(result.current.ageSeconds).toBe(25)
+    for (let i = 0; i < 4; i++) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000)
+      })
+    }
+    expect(f).toHaveBeenCalledTimes(5)
+    expect(result.current.data?.liveKey).toBe('k-opt-2')
+    expect(result.current.ageSeconds).toBe(145)
+  })
+
   it('keeps the previous vehicles after a key change until the new response lands', async () => {
     const vehA = [{ ...live.vehicles[0], label: 'A1' }]
     const vehB = [{ ...live.vehicles[1], label: 'B1' }]

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, cleanup, waitFor } from '@testing-library/react'
+import { act, render, screen, cleanup, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import fixture from '@/fixtures/plan.json'
 import liveFixture from '@/fixtures/live.json'
@@ -14,8 +14,8 @@ vi.mock('next/navigation', () => ({
 }))
 vi.mock('next/dynamic', () => ({
   default: () =>
-    function TripMapStub() {
-      return <div data-testid="map" />
+    function TripMapStub({ vehicles = [] }: { vehicles?: { label: string }[] }) {
+      return <div data-testid="map" data-vehicles={vehicles.map((v) => v.label).join(',')} />
     },
 }))
 
@@ -24,6 +24,7 @@ const base = { stop: 'Whyte Ave & 104 St', fallbackDepartAt: null }
 
 afterEach(() => {
   cleanup()
+  vi.useRealTimers()
   vi.unstubAllGlobals()
 })
 
@@ -98,5 +99,71 @@ describe('results page live polling', () => {
     expect(liveCalls[0][0]).toBe('/api/live?keys=k-opt-1')
     await userEvent.click(screen.getByRole('button', { name: 'Search again' }))
     await waitFor(() => expect(f.mock.calls.filter((c) => String(c[0]).startsWith('/api/plan'))).toHaveLength(2))
+  })
+})
+
+describe('results page live state', () => {
+  const isLive = (url: unknown) => String(url).startsWith('/api/live')
+  const ok = (body: unknown) => Promise.resolve({ ok: true, json: () => Promise.resolve(body) })
+  const flush = async () => {
+    for (let i = 0; i < 5; i++) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0)
+      })
+    }
+  }
+  const poll = async (n: number) => {
+    for (let i = 0; i < n; i++) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000)
+      })
+    }
+  }
+  // Live response for opt-1 that the server still calls not expired.
+  const liveNotExpired = { ...liveFixture, options: liveFixture.options.map((o) => ({ ...o, expired: false })) }
+
+  it('shows the stale banner after failed polls age the last good response past 120 s', async () => {
+    vi.useFakeTimers({ now: new Date('2026-11-14T18:05:00-07:00') })
+    let liveCalls = 0
+    vi.stubGlobal('fetch', vi.fn((url: unknown) => {
+      if (!isLive(url)) return ok(fixture)
+      return liveCalls++ === 0 ? ok({ ...liveNotExpired, liveDataAgeSeconds: 25 }) : Promise.reject(new Error('net'))
+    }))
+    render(<ResultsPage />)
+    await flush()
+    expect(liveCalls).toBe(1)
+    expect(screen.queryByRole('status')).toBeNull()
+    await poll(4)
+    expect(liveCalls).toBe(5)
+    expect(screen.getByRole('status').textContent).toBe('Live data is 2 min old.')
+  })
+
+  it('marks the selected option expired once its first departure passes, with no new server response', async () => {
+    vi.useFakeTimers({ now: new Date('2026-11-14T18:05:00-07:00') })
+    let liveCalls = 0
+    vi.stubGlobal('fetch', vi.fn((url: unknown) => {
+      if (!isLive(url)) return ok(fixture)
+      return liveCalls++ === 0 ? ok(liveNotExpired) : Promise.reject(new Error('net'))
+    }))
+    render(<ResultsPage />)
+    await flush()
+    expect(liveCalls).toBe(1)
+    expect(screen.queryByText('This option has left. Search again.')).toBeNull()
+    // opt-1 leaves at 18:12; poll on (all failing) until 18:13.
+    await poll(16)
+    expect(screen.getByText('This option has left. Search again.')).toBeTruthy()
+  })
+
+  it('keeps the last live vehicles on the map while a new selection loads', async () => {
+    const liveBody = { ...liveFixture, vehicles: [{ ...liveFixture.vehicles[0], label: 'LIVE1' }] }
+    vi.stubGlobal('fetch', vi.fn((url: unknown) => {
+      if (!isLive(url)) return ok(fixture)
+      return String(url).includes('k-opt-1') ? ok(liveBody) : new Promise(() => {})
+    }))
+    render(<ResultsPage />)
+    await waitFor(() => expect(screen.getByTestId('map').getAttribute('data-vehicles')).toBe('LIVE1'))
+    await userEvent.click(screen.getAllByRole('button', { name: /Leave/ })[1])
+    expect(screen.getAllByRole('button', { name: /Leave/ })[1].getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByTestId('map').getAttribute('data-vehicles')).toBe('LIVE1')
   })
 })
