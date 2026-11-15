@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import fixture from '@/fixtures/plan.json';
 import live from '@/fixtures/live.json';
 import routes from '@/fixtures/routes.json';
+import vehicleSummary from '@/fixtures/vehicle-summary.json';
 import routeDetail from '@/fixtures/route-detail.json';
 import {
   PlanResponse,
@@ -14,6 +15,10 @@ import {
   RouteSummary,
   RoutesResponse,
   RouteDetail,
+  FeedbackRequest,
+  VehicleSummary,
+  RideLink,
+  Issue,
 } from '@/src/contract/schema';
 
 describe('contract schema', () => {
@@ -102,5 +107,54 @@ describe('contract schema', () => {
         routes: [{ routeId: 'r9', shortName: '9', longName: 'Downtown' }],
       }),
     ).toBeTruthy();
+  });
+});
+
+describe('contract v3 feedback', () => {
+  const base = {
+    rideKey: '4012:trip1:2026-11-14',
+    vehicleLabel: '4012',
+    routeId: '5',
+    tripId: 'trip1',
+    serviceDate: '2026-11-14',
+    stars: 4,
+    accuracy: { time: 5, position: 4, crowding: 3, transfer: 2, alerts: 1 },
+    issue: 'too_full',
+    note: 'ok',
+  };
+
+  it('parses a full valid request', () => {
+    expect(FeedbackRequest.safeParse(base).success).toBe(true);
+  });
+
+  it('parses the vehicle summary fixture', () => {
+    const v = VehicleSummary.parse(vehicleSummary);
+    expect(v.ratingCount).toBe(12);
+    expect(Issue.options).toHaveLength(4);
+  });
+
+  it('parses a ride link', () => {
+    const t = '2026-11-14T08:00:00-07:00';
+    expect(
+      RideLink.safeParse({
+        rideKey: base.rideKey, vehicleLabel: '4012', routeId: '5', routeShortName: '5', tripId: 'trip1',
+        serviceDate: base.serviceDate, departAt: t, arriveAt: t,
+        showed: { crowding: true, transfer: false, alerts: false },
+      }).success,
+    ).toBe(true);
+  });
+
+  const bad: [string, unknown, string][] = [
+    ['stars 6', { ...base, stars: 6 }, 'stars'],
+    ['stars without vehicleLabel', { ...base, vehicleLabel: null, rideKey: 'none:trip1:2026-11-14' }, 'stars'],
+    ['unknown accuracy key', { ...base, accuracy: { speed: 3 } }, 'accuracy'],
+    ['501-char note', { ...base, note: 'x'.repeat(501) }, 'note'],
+    ['rideKey mismatch', { ...base, rideKey: 'x:trip1:2026-11-14' }, 'rideKey'],
+    ['empty request', { ...base, stars: undefined, issue: undefined, note: undefined, accuracy: {} }, 'accuracy'],
+  ];
+  it.each(bad)('rejects %s', (_n, input, field) => {
+    const r = FeedbackRequest.safeParse(input);
+    expect(r.success).toBe(false);
+    if (!r.success) expect(r.error.issues.some((i) => i.path[0] === field)).toBe(true);
   });
 });

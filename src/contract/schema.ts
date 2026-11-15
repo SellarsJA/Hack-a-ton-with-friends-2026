@@ -147,3 +147,70 @@ export const RouteDetail = z.object({
   alerts: z.array(z.object({ headline: z.string() })),
 });
 export type RouteDetail = z.infer<typeof RouteDetail>;
+
+export const Issue = z.enum(['cleanliness', 'safety', 'disruption', 'too_full']);
+export type Issue = z.infer<typeof Issue>;
+
+const Slider = z.number().int().min(1).max(5).optional();
+
+export const Accuracy = z
+  .object({
+    time: Slider,
+    position: Slider,
+    crowding: Slider,
+    transfer: Slider,
+    alerts: Slider,
+  })
+  .strict();
+export type Accuracy = z.infer<typeof Accuracy>;
+
+export const FeedbackRequest = z
+  .object({
+    rideKey: z.string().min(1),
+    vehicleLabel: z.string().nullable(),
+    routeId: z.string(),
+    tripId: z.string(),
+    serviceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    stars: z.number().int().min(1).max(5).optional(),
+    accuracy: Accuracy,
+    issue: Issue.optional(),
+    note: z.string().max(500).optional(),
+  })
+  .superRefine((v, ctx) => {
+    if (v.rideKey !== `${v.vehicleLabel ?? 'none'}:${v.tripId}:${v.serviceDate}`) {
+      ctx.addIssue({ code: 'custom', path: ['rideKey'], message: 'rideKey does not match ride' });
+    }
+    if (v.stars !== undefined && v.vehicleLabel === null) {
+      ctx.addIssue({ code: 'custom', path: ['stars'], message: 'stars require a vehicleLabel' });
+    }
+    const answered =
+      v.stars !== undefined ||
+      v.issue !== undefined ||
+      (v.note !== undefined && v.note.length > 0) ||
+      Object.values(v.accuracy).some((x) => x !== undefined);
+    if (!answered) {
+      ctx.addIssue({ code: 'custom', path: ['accuracy'], message: 'at least one answer is required' });
+    }
+  });
+export type FeedbackRequest = z.infer<typeof FeedbackRequest>;
+
+export const VehicleSummary = z.object({
+  label: z.string(),
+  averageStars: z.number().nullable(),
+  ratingCount: z.number().int().min(0),
+  issues: z.record(Issue, z.number().int().min(0)),
+});
+export type VehicleSummary = z.infer<typeof VehicleSummary>;
+
+export const RideLink = z.object({
+  rideKey: z.string(),
+  vehicleLabel: z.string().nullable(),
+  routeId: z.string(),
+  routeShortName: z.string(),
+  tripId: z.string(),
+  serviceDate: z.string(),
+  departAt: Timestamp,
+  arriveAt: Timestamp,
+  showed: z.object({ crowding: z.boolean(), transfer: z.boolean(), alerts: z.boolean() }),
+});
+export type RideLink = z.infer<typeof RideLink>;
