@@ -85,6 +85,8 @@ export default function TripMap({
   // Create the map once.
   useEffect(() => {
     if (!key || !container.current) return
+    // The bundled chunk's default worker URL 404s, so GeoJSON lines are never drawn.
+    maplibregl.setWorkerUrl?.('/maplibre-gl-worker.js')
     const map = new maplibregl.Map({
       container: container.current,
       style: styleFor(key),
@@ -200,7 +202,7 @@ export default function TripMap({
         e.stopPropagation()
         onSelectRef.current(p.optionId)
       })
-      return new maplibregl.Marker({ element: el }).setLngLat(p.lngLat).addTo(map)
+      return new maplibregl.Marker({ element: el, offset: [0, p.offsetY] }).setLngLat(p.lngLat).addTo(map)
     })
   }, [options, key])
 

@@ -45,6 +45,11 @@ describe('labelPoints', () => {
     const [lat, lon] = leg.path[Math.floor(leg.path.length / 2)]
     expect(labelPoints(options)[0].lngLat).toEqual([lon, lat])
   })
+  it('stacks a later option above the one before it', () => {
+    const points = labelPoints(options)
+    expect(points[0].offsetY).toBe(0)
+    expect(points[1].offsetY).toBe(-28)
+  })
 })
 
 describe('endpointMarkers', () => {

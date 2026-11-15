@@ -58,15 +58,21 @@ export function endpointMarkers(option: Option | undefined): MapEndpoint[] {
 
 export function labelPoints(
   options: Option[],
-): { optionId: string; lngLat: [number, number]; text: string }[] {
-  const out: { optionId: string; lngLat: [number, number]; text: string }[] = []
+): { optionId: string; lngLat: [number, number]; text: string; offsetY: number }[] {
+  const out: { optionId: string; lngLat: [number, number]; text: string; offsetY: number }[] = []
   for (const o of options) {
     const transit = o.legs.filter((l) => l.mode !== 'walk')
     const first = transit[0]
     if (!first || first.path.length === 0) continue
     const [lat, lon] = first.path[Math.floor(first.path.length / 2)]
     const routes = transit.map((l) => l.route).join('+')
-    out.push({ optionId: o.id, lngLat: [lon, lat], text: `${routes} · ${o.durationMinutes} min` })
+    // Stack pills that sit on the same corridor so the second route stays readable.
+    out.push({
+      optionId: o.id,
+      lngLat: [lon, lat],
+      text: `${routes} · ${o.durationMinutes} min`,
+      offsetY: -28 * out.length || 0,
+    })
   }
   return out
 }

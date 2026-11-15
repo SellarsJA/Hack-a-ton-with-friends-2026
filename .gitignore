@@ -37,6 +37,10 @@ yarn-error.log*
 # vercel
 .vercel
 
+# Copied from maplibre-gl by predev/prebuild. The bundler looks for this file
+# next to its chunk and 404s, which leaves route lines undrawn.
+/public/maplibre-gl-worker.js
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

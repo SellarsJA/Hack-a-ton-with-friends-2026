@@ -25,6 +25,7 @@ vi.mock('maplibre-gl', () => {
     }
   }
   class AttributionControl {}
+  function setWorkerUrl() {}
   class Marker {
     el: HTMLElement
     constructor(o: { element: HTMLElement }) {
@@ -44,7 +45,7 @@ vi.mock('maplibre-gl', () => {
       return this.el
     }
   }
-  return { Map, AttributionControl, Marker }
+  return { Map, AttributionControl, Marker, setWorkerUrl }
 })
 vi.mock('maplibre-gl/dist/maplibre-gl.css', () => ({}))
 
