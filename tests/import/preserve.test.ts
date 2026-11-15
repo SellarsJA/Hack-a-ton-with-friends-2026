@@ -41,9 +41,10 @@ describe('import preserves feedback data', () => {
 
   it('never lists feedback tables as schedule tables or in the truncate statement', () => {
     const stmt = truncateScheduleSql()
+    expect(stmt.split(/[ ,]+/)).toContain('stops') // sanity: the check can fail
     for (const t of PROTECTED) {
       expect(SCHEDULE_TABLES as readonly string[]).not.toContain(t)
-      expect(stmt).not.toMatch(new RegExp(`\b${t}\b`))
+      expect(stmt.split(/[ ,]+/)).not.toContain(t)
     }
   })
 })
