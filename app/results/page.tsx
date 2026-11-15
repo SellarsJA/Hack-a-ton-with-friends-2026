@@ -89,13 +89,23 @@ function Results() {
 
   return (
     <div className="mx-auto flex h-[calc(100dvh-3rem-env(safe-area-inset-bottom))] w-full max-w-md flex-col">
-      <header className="flex min-h-12 items-center gap-3 px-4 py-2">
-        <Link href="/" aria-label="Back" className="flex h-12 w-12 items-center justify-center text-xl">
+      <header className="flex min-h-12 items-center gap-2 px-2 py-2">
+        <Link
+          href="/"
+          aria-label="Back"
+          className="flex h-12 w-12 flex-none items-center justify-center rounded-full text-xl hover:bg-zinc-100 dark:hover:bg-zinc-800"
+        >
           ←
         </Link>
-        <h1 className="min-w-0 flex-1 text-sm font-semibold leading-snug">
-          <span className="block truncate">{fromLabel}</span>
-          <span className="block truncate">{`→ ${toLabel}`}</span>
+        <h1 className="flex min-w-0 flex-1 flex-col gap-1 text-sm font-semibold leading-snug">
+          <span className="flex min-w-0 items-center gap-2">
+            <span aria-hidden className="h-2.5 w-2.5 flex-none rounded-full bg-green-700" />
+            <span className="truncate">{fromLabel}</span>
+          </span>
+          <span className="flex min-w-0 items-center gap-2">
+            <span aria-hidden className="h-2.5 w-2.5 flex-none rounded-full bg-red-700" />
+            <span className="truncate">{`→ ${toLabel}`}</span>
+          </span>
         </h1>
       </header>
       <div className="h-[45%] shrink-0 bg-zinc-200 dark:bg-zinc-800">
@@ -132,15 +142,20 @@ function Results() {
               <p>{state.plan.emptyReason ? EMPTY_TEXT[state.plan.emptyReason] : 'No trips found.'}</p>
             ) : (
               <>
-                <label className="flex min-h-12 items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={showWalking}
-                    onChange={(e) => setShowWalking(e.target.checked)}
-                    className="h-5 w-5"
-                  />
-                  Show walking
-                </label>
+                <div className="flex min-h-12 items-center justify-between gap-3">
+                  <span className="text-sm text-zinc-600 dark:text-zinc-400">
+                    {`${state.plan.options.length} ${state.plan.options.length === 1 ? 'option' : 'options'}`}
+                  </span>
+                  <label className="flex min-h-12 items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={showWalking}
+                      onChange={(e) => setShowWalking(e.target.checked)}
+                      className="h-5 w-5 accent-blue-600"
+                    />
+                    Show walking
+                  </label>
+                </div>
                 <OptionList
                   options={displayed}
                   selectedId={selectedId}
