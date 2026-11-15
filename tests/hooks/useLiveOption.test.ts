@@ -110,6 +110,34 @@ describe('useLiveOption', () => {
     expect(result.current.data?.liveKey).toBe('k-opt-2')
   })
 
+  it('keeps the previous vehicles after a key change until the new response lands', async () => {
+    const vehA = [{ ...live.vehicles[0], label: 'A1' }]
+    const vehB = [{ ...live.vehicles[1], label: 'B1' }]
+    let resolveB: (v: { ok: boolean; json: () => Promise<unknown> }) => void = () => {}
+    const f = vi
+      .fn((..._a: unknown[]) => okRes({ ...liveFixture, vehicles: vehA }))
+      .mockImplementationOnce(() => okRes({ ...liveFixture, vehicles: vehA }))
+      .mockImplementationOnce(
+        () =>
+          new Promise((r) => {
+            resolveB = r
+          }),
+      )
+    vi.stubGlobal('fetch', f)
+    const { result, rerender } = renderHook(({ k }) => useLiveOption(k), { initialProps: { k: 'k-opt-1' } })
+    await act(async () => {})
+    expect(result.current.vehicles[0].label).toBe('A1')
+    rerender({ k: 'k-opt-2' })
+    await act(async () => {})
+    expect(result.current.data).toBeNull()
+    expect(result.current.vehicles[0].label).toBe('A1')
+    await act(async () => {
+      resolveB({ ok: true, json: () => Promise.resolve({ ...liveFixture, vehicles: vehB }) })
+    })
+    expect(result.current.data?.liveKey).toBe('k-opt-2')
+    expect(result.current.vehicles[0].label).toBe('B1')
+  })
+
   it('aborts the in-flight fetch on key change and unmount', async () => {
     const signals: AbortSignal[] = []
     vi.stubGlobal(
@@ -174,6 +202,29 @@ describe('mergeLive', () => {
     expect(new Date(merged.leaveAt).getTime() - new Date(opt4.leaveAt).getTime()).toBe(5 * 60000)
     expect(new Date(merged.arriveAt).getTime() - new Date(opt4.arriveAt).getTime()).toBe(7 * 60000)
     expect(merged.durationMinutes).toBe(opt4.durationMinutes + 2)
+  })
+
+  const ceilMins = (o: { leaveAt: string; arriveAt: string }) =>
+    Math.ceil((new Date(o.arriveAt).getTime() - new Date(o.leaveAt).getTime()) / 60000)
+
+  it('leg 1 unmatched, last leg matched +5: leaveAt unchanged, arriveAt shifts', () => {
+    const t = transitOf(opt4)
+    const last = t[t.length - 1]
+    const only = liveOpt4.legs.find((l) => l.tripId === last.tripId)!
+    const merged = mergeLive(opt4, { ...liveOpt4, legs: [{ ...only, departAt: shift(last.departAt, 5), arriveAt: shift(last.arriveAt, 5) }],
+    })
+    expect(merged.leaveAt).toBe(opt4.leaveAt)
+    expect(new Date(merged.arriveAt).getTime() - new Date(opt4.arriveAt).getTime()).toBe(5 * 60000)
+    expect(merged.durationMinutes).toBe(ceilMins(merged))
+  })
+
+  it('leg 1 matched +3, last leg unmatched: leaveAt shifts, arriveAt unchanged', () => {
+    const t = transitOf(opt4)
+    const only = liveOpt4.legs.find((l) => l.tripId === t[0].tripId)!
+    const merged = mergeLive(opt4, { ...liveOpt4, legs: [{ ...only, departAt: shift(t[0].departAt, 3) }] })
+    expect(new Date(merged.leaveAt).getTime() - new Date(opt4.leaveAt).getTime()).toBe(3 * 60000)
+    expect(merged.arriveAt).toBe(opt4.arriveAt)
+    expect(merged.durationMinutes).toBe(ceilMins(merged))
   })
 
   it('leaves legs without a live match untouched', () => {

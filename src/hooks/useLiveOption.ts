@@ -70,7 +70,10 @@ export function useLiveOption(liveKey: string | null): LiveState {
     }
   }, [liveKey])
 
-  return liveKey && state && state.key === liveKey ? state.value : EMPTY
+  if (!liveKey || !state) return EMPTY
+  // Keep the last vehicles across a key change so the dots do not flicker off.
+  if (state.key !== liveKey) return { data: null, vehicles: state.value.vehicles, ageSeconds: null }
+  return state.value
 }
 
 const shiftIso = (iso: string, ms: number) =>
@@ -85,20 +88,19 @@ export function mergeLive(option: Option, live: LiveOption): Option {
   const byTrip = new Map(live.legs.map((l) => [l.tripId, l]))
   let leaveShift = 0
   let arriveShift = 0
-  let seenFirst = false
+  let firstTransitIdx = -1
   let lastTransitIdx = -1
   option.legs.forEach((l, i) => {
-    if (l.mode !== 'walk') lastTransitIdx = i
+    if (l.mode === 'walk') return
+    if (firstTransitIdx < 0) firstTransitIdx = i
+    lastTransitIdx = i
   })
 
   const legs = option.legs.map((leg, i) => {
     if (leg.mode === 'walk') return leg
     const l = byTrip.get(leg.tripId)
     if (!l) return leg
-    if (!seenFirst) {
-      leaveShift = diffMs(l.departAt, leg.departAt)
-      seenFirst = true
-    }
+    if (i === firstTransitIdx) leaveShift = diffMs(l.departAt, leg.departAt)
     if (i === lastTransitIdx) arriveShift = diffMs(l.arriveAt, leg.arriveAt)
     return {
       ...leg,
