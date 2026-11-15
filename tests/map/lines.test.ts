@@ -13,20 +13,20 @@ describe('buildLineFeatures', () => {
     expect(p.find((x) => x.optionId === options[1].id)!.color).toBe('#7C3AED')
     expect(OPTION_COLORS).toHaveLength(5)
   })
-  it('selected option is width 7, others 4', () => {
+  it('marks only the selected option', () => {
     const p = props(buildLineFeatures(options, options[1].id, false))
-    expect(p.filter((x) => x.optionId === options[1].id).every((x) => x.width === 7)).toBe(true)
-    expect(p.filter((x) => x.optionId !== options[1].id).every((x) => x.width === 4)).toBe(true)
+    expect(p.filter((x) => x.optionId === options[1].id).every((x) => x.on === 1)).toBe(true)
+    expect(p.filter((x) => x.optionId !== options[1].id).every((x) => x.on === 0)).toBe(true)
   })
   it('draws the selected option last', () => {
     const p = props(buildLineFeatures(options, options[0].id, false))
     expect(p[p.length - 1].optionId).toBe(options[0].id)
   })
   it('omits walk legs unless showWalking', () => {
-    expect(props(buildLineFeatures(options, null, false)).some((x) => x.dashed)).toBe(false)
-    const walk = props(buildLineFeatures(options, null, true)).filter((x) => x.dashed)
+    expect(props(buildLineFeatures(options, null, false)).some((x) => x.kind === 'walk')).toBe(false)
+    const walk = props(buildLineFeatures(options, null, true)).filter((x) => x.kind === 'walk')
     expect(walk.length).toBeGreaterThan(0)
-    expect(walk.every((x) => x.color === '#9CA3AF' && x.width === 3)).toBe(true)
+    expect(walk.every((x) => x.color === '#9CA3AF')).toBe(true)
   })
   it('uses [lon, lat] coordinates', () => {
     const f = buildLineFeatures(options, null, true).features[0]

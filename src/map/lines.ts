@@ -26,8 +26,9 @@ export function buildLineFeatures(
         properties: {
           optionId: o.id,
           color: walk ? WALK_COLOR : colorFor(i),
-          width: walk ? 3 : selected ? 7 : 4,
-          dashed: walk,
+          // Strings, not booleans: a false property can be dropped when the line is tiled.
+          kind: walk ? 'walk' : 'ride',
+          on: selected ? 1 : 0,
         },
         geometry: { type: 'LineString', coordinates: leg.path.map(([lat, lon]) => [lon, lat]) },
       })

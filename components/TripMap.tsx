@@ -85,28 +85,36 @@ export default function TripMap({ options, selectedId, showWalking, onSelect }: 
     map.on('load', () => {
       const { options, selectedId, showWalking } = latest.current
       map.addSource(SOURCE, { type: 'geojson', data: buildLineFeatures(options, selectedId, showWalking) })
-      const paint: maplibregl.LineLayerSpecification['paint'] = {
-        'line-color': ['get', 'color'],
-        'line-width': ['get', 'width'],
-      }
-      const layout: maplibregl.LineLayerSpecification['layout'] = { 'line-cap': 'round', 'line-join': 'round' }
+      const ride = ['==', ['get', 'kind'], 'ride'] as const
+      // Literal widths. A data-driven width was collapsing the stroke to a hairline on the basemap.
+      map.addLayer({
+        id: 'lines-casing',
+        type: 'line',
+        source: SOURCE,
+        filter: [...ride],
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': '#111827', 'line-width': 12 },
+      })
       map.addLayer({
         id: 'lines-solid',
         type: 'line',
         source: SOURCE,
-        filter: ['!=', ['get', 'dashed'], true],
-        layout,
-        paint: { ...paint },
+        filter: [...ride],
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': ['to-color', ['get', 'color']],
+          'line-width': ['case', ['==', ['get', 'on'], 1], 8, 5],
+        },
       })
       map.addLayer({
         id: 'lines-dashed',
         type: 'line',
         source: SOURCE,
-        filter: ['==', ['get', 'dashed'], true],
-        layout: { 'line-join': 'round' },
-        paint: { ...paint, 'line-dasharray': [2, 2] },
+        filter: ['==', ['get', 'kind'], 'walk'],
+        layout: { 'line-cap': 'butt', 'line-join': 'round' },
+        paint: { 'line-color': '#374151', 'line-width': 4, 'line-dasharray': [2, 2] },
       })
-      for (const id of ['lines-solid', 'lines-dashed']) {
+      for (const id of ['lines-casing', 'lines-solid', 'lines-dashed']) {
         map.on('click', id, (e: maplibregl.MapLayerMouseEvent) => {
           const optionId = e.features?.[0]?.properties?.optionId
           if (typeof optionId === 'string') onSelectRef.current(optionId)
