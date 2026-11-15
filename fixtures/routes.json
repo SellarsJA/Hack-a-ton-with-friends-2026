@@ -1,0 +1,39 @@
+{
+  "routes": [
+    {
+      "routeId": "9",
+      "shortName": "9",
+      "longName": "Meadowlark - Capilano",
+      "group": "bus",
+      "color": null
+    },
+    {
+      "routeId": "4",
+      "shortName": "4",
+      "longName": "Abbottsfield - Lewis Farms",
+      "group": "bus",
+      "color": null
+    },
+    {
+      "routeId": "7",
+      "shortName": "7",
+      "longName": "Jasper Place - Pembina",
+      "group": "bus",
+      "color": "1F2937"
+    },
+    {
+      "routeId": "VLY",
+      "shortName": "Valley Line",
+      "longName": "Mill Woods - Downtown",
+      "group": "rail",
+      "color": "0EA5E9"
+    },
+    {
+      "routeId": "700",
+      "shortName": "700",
+      "longName": "St. Albert - Edmonton",
+      "group": "regional",
+      "color": null
+    }
+  ]
+}

@@ -64,6 +64,8 @@ export function assembleDirectOptions(cands: Candidate[], ctx: AssembleCtx): Opt
       toStop: c.alight.name,
       vehicleLabel: rt.vehicleLabel,
       occupancy: rt.occupancy,
+      vehiclePosition: null,
+      transferWalkMinutesBefore: null,
       path: shape ? sliceShape(shape, boardPt, alightPt) : [[boardPt.lat, boardPt.lon], [alightPt.lat, alightPt.lon]],
     })
     if (c.alight.walkSeconds > 0) {
@@ -86,6 +88,7 @@ export function assembleDirectOptions(cands: Candidate[], ctx: AssembleCtx): Opt
     }
     return {
       id: `opt-${i + 1}`,
+      liveKey: '', // placeholder until Task 6
       leaveAt: iso(leaveAt),
       arriveAt: iso(finalArrive),
       durationMinutes: Math.ceil((finalArrive - leaveAt) / 60),

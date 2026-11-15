@@ -36,10 +36,10 @@ afterEach(() => {
 })
 
 describe('OptionList', () => {
-  it('renders 3 cards in order with badges', () => {
+  it('renders 4 cards in order with badges', () => {
     render(<Harness />)
     const cards = screen.getAllByRole('button', { name: /Leave/ })
-    expect(cards).toHaveLength(3)
+    expect(cards).toHaveLength(4)
     expect(within(cards[0]).getByText('Leave 6:07 PM · 34 min · $3.00')).toBeTruthy()
     expect(within(cards[0]).getByText('Cash $3.75')).toBeTruthy()
     expect(within(cards[0]).getByText('Live')).toBeTruthy()
@@ -67,7 +67,7 @@ describe('OptionList', () => {
     const cards = screen.getAllByRole('button', { name: /Leave/ })
     await userEvent.click(cards[1])
     const items = screen.getAllByRole('listitem').filter((li) => li.parentElement?.tagName === 'UL')
-    expect(items).toHaveLength(3)
+    expect(items).toHaveLength(4)
     expect(screen.getAllByTestId('option-detail')).toHaveLength(1)
     const detail = within(items[1]).getByTestId('option-detail')
     expect(detail.previousElementSibling).toBe(cards[1])
@@ -127,7 +127,7 @@ describe('results page', () => {
     const f = mockFetch(() => ok(fixture))
     render(<ResultsPage />)
     expect(screen.getByText('Finding trips…')).toBeTruthy()
-    expect((await screen.findAllByRole('button', { name: /Leave/ })).length).toBe(3)
+    expect((await screen.findAllByRole('button', { name: /Leave/ })).length).toBe(4)
     const heading = screen.getByRole('heading', { name: /Churchill/ })
     expect(heading.textContent).toContain('Churchill')
     expect(heading.textContent).toContain('Southgate')
@@ -183,7 +183,7 @@ describe('results page', () => {
       await screen.findByText("Couldn't load trip options. Check your connection and try again."),
     ).toBeTruthy()
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
-    await waitFor(() => expect(screen.getAllByRole('button', { name: /Leave/ })).toHaveLength(3))
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /Leave/ })).toHaveLength(4))
     expect(f).toHaveBeenCalledTimes(2)
   })
 

@@ -1,0 +1,119 @@
+{
+  "liveDataAgeSeconds": 12,
+  "options": [
+    {
+      "liveKey": "k-opt-1",
+      "expired": true,
+      "legs": [
+        {
+          "tripId": "33560745",
+          "departAt": "2026-11-14T18:12:00-07:00",
+          "arriveAt": "2026-11-14T18:36:00-07:00",
+          "realtime": true,
+          "vehicleLabel": "4393",
+          "occupancy": "some_standing",
+          "vehiclePosition": {
+            "lat": 53.5105,
+            "lon": -113.5042
+          }
+        }
+      ],
+      "transfer": null
+    },
+    {
+      "liveKey": "k-opt-2",
+      "expired": false,
+      "legs": [
+        {
+          "tripId": "33561102",
+          "departAt": "2026-11-14T18:19:00-07:00",
+          "arriveAt": "2026-11-14T18:47:00-07:00",
+          "realtime": false,
+          "vehicleLabel": null,
+          "occupancy": null,
+          "vehiclePosition": null
+        }
+      ],
+      "transfer": null
+    },
+    {
+      "liveKey": "k-opt-3",
+      "expired": false,
+      "legs": [
+        {
+          "tripId": "33559988",
+          "departAt": "2026-11-14T18:17:00-07:00",
+          "arriveAt": "2026-11-14T18:44:00-07:00",
+          "realtime": true,
+          "vehicleLabel": "4120",
+          "occupancy": "full",
+          "vehiclePosition": {
+            "lat": 53.5067,
+            "lon": -113.504
+          }
+        }
+      ],
+      "transfer": null
+    },
+    {
+      "liveKey": "k-opt-4",
+      "expired": false,
+      "legs": [
+        {
+          "tripId": "33560801",
+          "departAt": "2026-11-14T18:12:00-07:00",
+          "arriveAt": "2026-11-14T18:34:00-07:00",
+          "realtime": true,
+          "vehicleLabel": "4401",
+          "occupancy": "not_crowded",
+          "vehiclePosition": {
+            "lat": 53.5309,
+            "lon": -113.4962
+          }
+        },
+        {
+          "tripId": "98210044",
+          "departAt": "2026-11-14T18:35:00-07:00",
+          "arriveAt": "2026-11-14T18:50:00-07:00",
+          "realtime": false,
+          "vehicleLabel": null,
+          "occupancy": null,
+          "vehiclePosition": null
+        }
+      ],
+      "transfer": {
+        "stop": "Whyte Ave & 104 St",
+        "spareMinutes": -1,
+        "status": "at_risk",
+        "basedOn": "scheduled",
+        "fallbackDepartAt": "2026-11-14T18:50:00-07:00"
+      }
+    }
+  ],
+  "vehicles": [
+    {
+      "label": "4393",
+      "tripId": "33560745",
+      "routeShortName": "9",
+      "lat": 53.5105,
+      "lon": -113.5042,
+      "occupancy": "some_standing"
+    },
+    {
+      "label": "4401",
+      "tripId": "33560801",
+      "routeShortName": "9",
+      "lat": 53.5309,
+      "lon": -113.4962,
+      "occupancy": "not_crowded"
+    },
+    {
+      "label": "4120",
+      "tripId": "33559988",
+      "routeShortName": "4",
+      "lat": 53.5067,
+      "lon": -113.504,
+      "occupancy": "full"
+    }
+  ]
+}

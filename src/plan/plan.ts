@@ -62,7 +62,7 @@ export async function planTrip(
   ])
   const liveDataAgeSeconds = live ? Math.max(0, Math.round(nowEpoch - live.feedTimestamp)) : null
   const empty = (emptyReason: NonNullable<PlanResponse['emptyReason']>): PlanResponse => ({
-    generatedAt, liveDataAgeSeconds, emptyReason, options: [],
+    generatedAt, liveDataAgeSeconds, emptyReason, options: [], vehicles: [],
   })
   if (origin.length === 0) return empty('no_stops_near_start')
   if (dest.length === 0) return empty('no_stops_near_end')
@@ -72,5 +72,5 @@ export async function planTrip(
   const shapes = await deps.loadShapes(deps.db, shapeIds)
   const options = assembleDirectOptions(cands, { from, to, live, nowEpoch, shapes })
   if (options.length === 0) return empty('no_trips_soon')
-  return { generatedAt, liveDataAgeSeconds, emptyReason: null, options }
+  return { generatedAt, liveDataAgeSeconds, emptyReason: null, options, vehicles: [] }
 }

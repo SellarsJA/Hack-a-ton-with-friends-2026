@@ -1,0 +1,148 @@
+{
+  "route": {
+    "routeId": "9",
+    "shortName": "9",
+    "longName": "Meadowlark - Capilano",
+    "group": "bus",
+    "color": null
+  },
+  "patterns": [
+    {
+      "headsign": "Southgate",
+      "path": [
+        [
+          53.5444,
+          -113.4909
+        ],
+        [
+          53.53599,
+          -113.49416
+        ],
+        [
+          53.52757,
+          -113.49741
+        ],
+        [
+          53.51916,
+          -113.50067
+        ],
+        [
+          53.51074,
+          -113.50393
+        ],
+        [
+          53.50233,
+          -113.50719
+        ],
+        [
+          53.49391,
+          -113.51044
+        ],
+        [
+          53.4855,
+          -113.5137
+        ]
+      ],
+      "stops": [
+        {
+          "stopId": "1001",
+          "name": "Churchill Station",
+          "lat": 53.5444,
+          "lon": -113.4909
+        },
+        {
+          "stopId": "1003",
+          "name": "Whyte Ave & 104 St",
+          "lat": 53.5185,
+          "lon": -113.4975
+        },
+        {
+          "stopId": "1002",
+          "name": "Southgate Transit Centre",
+          "lat": 53.4855,
+          "lon": -113.5137
+        }
+      ]
+    },
+    {
+      "headsign": "Churchill",
+      "path": [
+        [
+          53.4855,
+          -113.5137
+        ],
+        [
+          53.49391,
+          -113.51044
+        ],
+        [
+          53.50233,
+          -113.50719
+        ],
+        [
+          53.51074,
+          -113.50393
+        ],
+        [
+          53.51916,
+          -113.50067
+        ],
+        [
+          53.52757,
+          -113.49741
+        ],
+        [
+          53.53599,
+          -113.49416
+        ],
+        [
+          53.5444,
+          -113.4909
+        ]
+      ],
+      "stops": [
+        {
+          "stopId": "1002",
+          "name": "Southgate Transit Centre",
+          "lat": 53.4855,
+          "lon": -113.5137
+        },
+        {
+          "stopId": "1001",
+          "name": "Churchill Station",
+          "lat": 53.5444,
+          "lon": -113.4909
+        }
+      ]
+    }
+  ],
+  "departures": [
+    {
+      "tripId": "33560745",
+      "headsign": "Southgate",
+      "departAt": "2026-11-14T18:12:00-07:00",
+      "realtime": true
+    },
+    {
+      "tripId": "33560801",
+      "headsign": "Southgate",
+      "departAt": "2026-11-14T18:27:00-07:00",
+      "realtime": false
+    }
+  ],
+  "vehicles": [
+    {
+      "label": "4393",
+      "tripId": "33560745",
+      "routeShortName": "9",
+      "lat": 53.5105,
+      "lon": -113.5042,
+      "occupancy": "some_standing"
+    }
+  ],
+  "alerts": [
+    {
+      "headline": "Detour on 82 St"
+    }
+  ]
+}

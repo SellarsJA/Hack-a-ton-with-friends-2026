@@ -38,6 +38,8 @@ const TransitLeg = z.object({
   toStop: z.string(),
   vehicleLabel: z.string().nullable(),
   occupancy: Occupancy.nullable(),
+  vehiclePosition: LatLng.nullable(),
+  transferWalkMinutesBefore: z.number().nullable(),
   path: Path,
 });
 
@@ -55,6 +57,7 @@ export type Transfer = z.infer<typeof Transfer>;
 
 export const Option = z.object({
   id: z.string(),
+  liveKey: z.string(),
   leaveAt: Timestamp,
   arriveAt: Timestamp,
   durationMinutes: z.number(),
@@ -66,11 +69,22 @@ export const Option = z.object({
 });
 export type Option = z.infer<typeof Option>;
 
+export const Vehicle = z.object({
+  label: z.string(),
+  tripId: z.string(),
+  routeShortName: z.string(),
+  lat: z.number(),
+  lon: z.number(),
+  occupancy: Occupancy.nullable(),
+});
+export type Vehicle = z.infer<typeof Vehicle>;
+
 export const PlanResponse = z.object({
   generatedAt: Timestamp,
   liveDataAgeSeconds: z.number().nullable(),
   emptyReason: z.enum(['no_stops_near_start', 'no_stops_near_end', 'no_trips_soon']).nullable(),
   options: z.array(Option),
+  vehicles: z.array(Vehicle),
 });
 export type PlanResponse = z.infer<typeof PlanResponse>;
 
@@ -79,3 +93,57 @@ export const SearchResponse = z.object({
   routes: z.array(z.object({ routeId: z.string(), shortName: z.string(), longName: z.string() })),
 });
 export type SearchResponse = z.infer<typeof SearchResponse>;
+
+export const LiveOption = z.object({
+  liveKey: z.string(),
+  expired: z.boolean(),
+  legs: z.array(
+    z.object({
+      tripId: z.string(),
+      departAt: Timestamp,
+      arriveAt: Timestamp,
+      realtime: z.boolean(),
+      vehicleLabel: z.string().nullable(),
+      occupancy: Occupancy.nullable(),
+      vehiclePosition: LatLng.nullable(),
+    }),
+  ),
+  transfer: Transfer.nullable(),
+});
+export type LiveOption = z.infer<typeof LiveOption>;
+
+export const LiveResponse = z.object({
+  liveDataAgeSeconds: z.number().nullable(),
+  options: z.array(LiveOption),
+  vehicles: z.array(Vehicle),
+});
+export type LiveResponse = z.infer<typeof LiveResponse>;
+
+export const RouteSummary = z.object({
+  routeId: z.string(),
+  shortName: z.string(),
+  longName: z.string(),
+  group: z.enum(['bus', 'rail', 'regional']),
+  color: z.string().nullable(),
+});
+export type RouteSummary = z.infer<typeof RouteSummary>;
+
+export const RoutesResponse = z.object({ routes: z.array(RouteSummary) });
+export type RoutesResponse = z.infer<typeof RoutesResponse>;
+
+export const RouteDetail = z.object({
+  route: RouteSummary,
+  patterns: z.array(
+    z.object({
+      headsign: z.string(),
+      path: Path,
+      stops: z.array(z.object({ stopId: z.string(), name: z.string(), lat: z.number(), lon: z.number() })),
+    }),
+  ),
+  departures: z.array(
+    z.object({ tripId: z.string(), headsign: z.string(), departAt: Timestamp, realtime: z.boolean() }),
+  ),
+  vehicles: z.array(Vehicle),
+  alerts: z.array(z.object({ headline: z.string() })),
+});
+export type RouteDetail = z.infer<typeof RouteDetail>;

@@ -90,7 +90,12 @@
               53.489,
               -113.512
             ]
-          ]
+          ],
+          "vehiclePosition": {
+            "lat": 53.5105,
+            "lon": -113.5042
+          },
+          "transferWalkMinutesBefore": null
         },
         {
           "mode": "walk",
@@ -118,7 +123,8 @@
             ]
           ]
         }
-      ]
+      ],
+      "liveKey": "k-opt-1"
     },
     {
       "id": "opt-2",
@@ -207,7 +213,9 @@
               53.498,
               -113.5071
             ]
-          ]
+          ],
+          "vehiclePosition": null,
+          "transferWalkMinutesBefore": null
         },
         {
           "mode": "walk",
@@ -235,7 +243,8 @@
             ]
           ]
         }
-      ]
+      ],
+      "liveKey": "k-opt-2"
     },
     {
       "id": "opt-3",
@@ -328,7 +337,12 @@
               53.489,
               -113.512
             ]
-          ]
+          ],
+          "vehiclePosition": {
+            "lat": 53.5067,
+            "lon": -113.504
+          },
+          "transferWalkMinutesBefore": null
         },
         {
           "mode": "walk",
@@ -356,7 +370,205 @@
             ]
           ]
         }
+      ],
+      "liveKey": "k-opt-3"
+    },
+    {
+      "id": "opt-4",
+      "liveKey": "k-opt-4",
+      "leaveAt": "2026-11-14T18:09:00-07:00",
+      "arriveAt": "2026-11-14T18:55:00-07:00",
+      "durationMinutes": 46,
+      "fare": {
+        "amount": 3,
+        "cashAmount": 3.75,
+        "estimated": false,
+        "label": "Adult, Arc or tap. Transfers included"
+      },
+      "alerts": [],
+      "transfer": {
+        "stop": "Whyte Ave & 104 St",
+        "spareMinutes": 2,
+        "status": "tight",
+        "basedOn": "scheduled",
+        "fallbackDepartAt": null
+      },
+      "snow": [],
+      "legs": [
+        {
+          "mode": "walk",
+          "minutes": 3,
+          "path": [
+            [
+              53.5444,
+              -113.4909
+            ],
+            [
+              53.54394,
+              -113.49142
+            ],
+            [
+              53.54348,
+              -113.49194
+            ],
+            [
+              53.54302,
+              -113.49246
+            ],
+            [
+              53.54256,
+              -113.49298
+            ],
+            [
+              53.5421,
+              -113.4935
+            ]
+          ]
+        },
+        {
+          "mode": "bus",
+          "route": "9",
+          "headsign": "Valley Line LRT",
+          "tripId": "33560801",
+          "serviceDate": "2026-11-14",
+          "departAt": "2026-11-14T18:12:00-07:00",
+          "arriveAt": "2026-11-14T18:30:00-07:00",
+          "realtime": true,
+          "fromStop": "Stop 1234",
+          "toStop": "Stop 3300",
+          "vehicleLabel": "4401",
+          "occupancy": "not_crowded",
+          "vehiclePosition": {
+            "lat": 53.5309,
+            "lon": -113.4962
+          },
+          "transferWalkMinutesBefore": null,
+          "path": [
+            [
+              53.5421,
+              -113.4935
+            ],
+            [
+              53.53746,
+              -113.49402
+            ],
+            [
+              53.53282,
+              -113.49454
+            ],
+            [
+              53.52818,
+              -113.49506
+            ],
+            [
+              53.52354,
+              -113.49558
+            ],
+            [
+              53.5189,
+              -113.4961
+            ]
+          ]
+        },
+        {
+          "mode": "rail",
+          "route": "Valley Line",
+          "headsign": "Millwoods",
+          "tripId": "98210044",
+          "serviceDate": "2026-11-14",
+          "departAt": "2026-11-14T18:35:00-07:00",
+          "arriveAt": "2026-11-14T18:50:00-07:00",
+          "realtime": false,
+          "fromStop": "Valley Line Stop",
+          "toStop": "Southgate Station",
+          "vehicleLabel": null,
+          "occupancy": null,
+          "vehiclePosition": null,
+          "transferWalkMinutesBefore": 2,
+          "path": [
+            [
+              53.5185,
+              -113.4975
+            ],
+            [
+              53.5119,
+              -113.50074
+            ],
+            [
+              53.5053,
+              -113.50398
+            ],
+            [
+              53.4987,
+              -113.50722
+            ],
+            [
+              53.4921,
+              -113.51046
+            ],
+            [
+              53.4855,
+              -113.5137
+            ]
+          ]
+        },
+        {
+          "mode": "walk",
+          "minutes": 5,
+          "path": [
+            [
+              53.4855,
+              -113.5137
+            ],
+            [
+              53.4854,
+              -113.51356
+            ],
+            [
+              53.4853,
+              -113.51342
+            ],
+            [
+              53.4852,
+              -113.51328
+            ],
+            [
+              53.4851,
+              -113.51314
+            ],
+            [
+              53.485,
+              -113.513
+            ]
+          ]
+        }
       ]
+    }
+  ],
+  "vehicles": [
+    {
+      "label": "4393",
+      "tripId": "33560745",
+      "routeShortName": "9",
+      "lat": 53.5105,
+      "lon": -113.5042,
+      "occupancy": "some_standing"
+    },
+    {
+      "label": "4401",
+      "tripId": "33560801",
+      "routeShortName": "9",
+      "lat": 53.5309,
+      "lon": -113.4962,
+      "occupancy": "not_crowded"
+    },
+    {
+      "label": "4120",
+      "tripId": "33559988",
+      "routeShortName": "4",
+      "lat": 53.5067,
+      "lon": -113.504,
+      "occupancy": "full"
     }
   ]
 }
