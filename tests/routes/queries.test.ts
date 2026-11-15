@@ -98,6 +98,34 @@ describe('routeDetail', () => {
     expect(d.alerts).toEqual([{ headline: 'R9 detour' }])
   })
 
+  it('picks the trip with the most stops for a headsign (A, not the 2-stop G) and breaks ties by trip id', async () => {
+    // R9 "Southgate": A (3 stops, shape), D (3 stops), G (2 stops: 1002, 1007)
+    const d = (await routeDetail(db, 'R9', null, NOW, noLive))!
+    expect(d.patterns[0].stops.map((s) => s.stopId)).toEqual(['1001', '1003', '1002'])
+    expect(d.patterns[0].stops).toHaveLength(3)
+  })
+
+  it('still yields a pattern from yesterday-only service just after midnight', async () => {
+    // WK runs 11-14 and 11-15; at 00:30 on 11-16 only yesterday's service is active.
+    const d = (await routeDetail(db, 'R9', null, at('2026-11-16T00:30:00'), noLive))!
+    expect(d.patterns).toHaveLength(1)
+    expect(d.patterns[0].stops.map((s) => s.stopId)).toEqual(['1001', '1003', '1002'])
+  })
+
+  it('includes vehicles from the injected lookup', async () => {
+    const v = { label: 'V1', tripId: 'A', routeShortName: '9', lat: 53.5, lon: -113.5, occupancy: null }
+    const calls: string[][] = []
+    const d = (await routeDetail(db, 'R9', null, NOW, {
+      getLiveIndex: async () => null,
+      vehiclesForRoutes: async (ids) => {
+        calls.push(ids)
+        return [v]
+      },
+    }))!
+    expect(calls).toEqual([['R9']])
+    expect(d.vehicles).toEqual([v])
+  })
+
   it('throws when the route lookup fails', async () => {
     const bad: Db = { query: async () => Promise.reject(new Error('db down')) }
     await expect(routeDetail(bad, 'R9', null, NOW, noLive)).rejects.toThrow()
