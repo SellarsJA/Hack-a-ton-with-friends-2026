@@ -59,6 +59,28 @@ describe('findDirectCandidates', () => {
     expect(c[0].alight.arr).toBe(25 * 3600 + 600)
   })
 
+  it('still finds trip A at 18:05 when the rider is at the stop', async () => {
+    const o = await findNearbyStops(db, CHURCHILL, 300)
+    const d = await findNearbyStops(db, SOUTHGATE, 300)
+    const c = await findDirectCandidates(db, o, d, at('2026-11-14T18:05:00'))
+    expect(c.map((x) => x.tripId)).toEqual(['A'])
+  })
+
+  it('excludes trip A when the rider cannot walk to the stop in time', async () => {
+    const far = { lat: 53.5498, lon: -113.4909 } // ~600 m north of stop 1001
+    const o = await findNearbyStops(db, far, 800)
+    expect(o.map((x) => x.stopId)).toContain('1001')
+    expect(o.find((x) => x.stopId === '1001')!.walkSeconds).toBeGreaterThanOrEqual(540)
+    const d = await findNearbyStops(db, SOUTHGATE, 300)
+    expect(await findDirectCandidates(db, o, d, at('2026-11-14T18:09:00'))).toEqual([])
+  })
+
+  it('excludes trips departing more than 5400 s ahead', async () => {
+    const o = await findNearbyStops(db, CHURCHILL, 300)
+    const d = await findNearbyStops(db, SOUTHGATE, 300)
+    expect(await findDirectCandidates(db, o, d, at('2026-11-14T16:30:00'))).toEqual([])
+  })
+
   it('returns [] without querying when origin or dest is empty', async () => {
     const boom: Db = {
       query: () => {
