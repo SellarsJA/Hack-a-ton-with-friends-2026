@@ -122,7 +122,7 @@ export default function TripMap({ options, selectedId, showWalking, onSelect }: 
         [a, b],
         [c, d],
       ],
-      { padding: 40, animate: false },
+      { padding: 40, animate: false, maxZoom: 16 },
     )
   }, [options, key])
 

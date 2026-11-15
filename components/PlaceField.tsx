@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { Place } from '@/src/tomtom/place'
 import { suggestAddresses } from '@/src/tomtom/suggest'
 import type { SearchResponse } from '@/src/contract/schema'
@@ -40,6 +40,8 @@ export default function PlaceField({
   const [results, setResults] = useState<Place[]>([])
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(-1)
+  // A debounced lookup that lands after blur must not reopen the list.
+  const focused = useRef(false)
 
   const text = draft ?? value?.label ?? pendingLabel ?? ''
   const query = draft?.trim() ?? ''
@@ -58,7 +60,7 @@ export default function PlaceField({
         ...(addresses.status === 'fulfilled' ? addresses.value : []),
       ])
       setActive(-1)
-      setOpen(true)
+      if (focused.current) setOpen(true)
     }, DEBOUNCE_MS)
     return () => {
       clearTimeout(timer)
@@ -100,6 +102,8 @@ export default function PlaceField({
     }
   }
 
+  const listVisible = open && results.length > 0
+
   return (
     <div className="relative w-full">
       <label htmlFor={id} className="mb-1 block text-sm font-medium">
@@ -109,8 +113,8 @@ export default function PlaceField({
         id={id}
         type="text"
         role="combobox"
-        aria-expanded={open}
-        aria-controls={listId}
+        aria-expanded={listVisible}
+        aria-controls={listVisible ? listId : undefined}
         aria-autocomplete="list"
         aria-activedescendant={active >= 0 ? `${id}-opt-${active}` : undefined}
         aria-describedby={hint ? `${id}-hint` : undefined}
@@ -121,7 +125,14 @@ export default function PlaceField({
         onChange={(e) => type(e.target.value)}
         onKeyDown={onKeyDown}
         onFocus={(e) => {
+          focused.current = true
           if (draft === null) e.target.select()
+        }}
+        onBlur={() => {
+          // Options use onMouseDown preventDefault, so clicking one does not blur first.
+          focused.current = false
+          setOpen(false)
+          setActive(-1)
         }}
         className="h-12 w-full rounded-lg border border-zinc-300 bg-white px-3 text-base text-black dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
       />
@@ -130,7 +141,7 @@ export default function PlaceField({
           {hint}
         </p>
       )}
-      {open && results.length > 0 && (
+      {listVisible && (
         <ul
           id={listId}
           role="listbox"

@@ -1,3 +1,5 @@
+import TomTomCredit from './TomTomCredit'
+
 const TERMS_URL =
   'https://data.edmonton.ca/stories/s/City-of-Edmonton-Open-Data-Terms-of-Use/msh8-if28/'
 
@@ -12,6 +14,7 @@ export default function Footer() {
       >
         Contains information licensed under the Open Government Licence – City of Edmonton.
       </a>
+      <TomTomCredit />
     </footer>
   )
 }

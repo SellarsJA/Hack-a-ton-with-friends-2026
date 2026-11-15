@@ -26,13 +26,7 @@ const plan = PlanResponse.parse(fixture)
 
 function Harness() {
   const [id, setId] = useState(plan.options[0].id)
-  const sel = plan.options.find((o) => o.id === id)!
-  return (
-    <>
-      <OptionList options={plan.options} selectedId={id} onSelect={setId} />
-      <OptionDetail option={sel} />
-    </>
-  )
+  return <OptionList options={plan.options} selectedId={id} onSelect={setId} />
 }
 
 afterEach(() => {
@@ -66,6 +60,19 @@ describe('OptionList', () => {
     expect(within(detail).getAllByText(/^(Bus|Train) \S+ to /).length).toBeGreaterThan(0)
     expect(within(detail).getAllByText(/^From /).length).toBeGreaterThan(0)
     expect(within(detail).getAllByText(/^To /).length).toBeGreaterThan(0)
+  })
+
+  it("renders the selected card's steps inside its own list item, directly under the card", async () => {
+    render(<Harness />)
+    const cards = screen.getAllByRole('button', { name: /Leave/ })
+    await userEvent.click(cards[1])
+    const items = screen.getAllByRole('listitem').filter((li) => li.parentElement?.tagName === 'UL')
+    expect(items).toHaveLength(3)
+    expect(screen.getAllByTestId('option-detail')).toHaveLength(1)
+    const detail = within(items[1]).getByTestId('option-detail')
+    expect(detail.previousElementSibling).toBe(cards[1])
+    expect(within(items[0]).queryByTestId('option-detail')).toBeNull()
+    expect(within(items[2]).queryByTestId('option-detail')).toBeNull()
   })
 
   it('appends (estimated) when the fare is estimated', () => {
@@ -130,6 +137,10 @@ describe('results page', () => {
     expect(map.getAttribute('data-show-walking')).toBe('true')
     await userEvent.click(screen.getByLabelText('Show walking'))
     expect(map.getAttribute('data-show-walking')).toBe('false')
+    // the first option is selected and its steps sit inside its card's list item
+    const firstCard = screen.getAllByRole('button', { name: /Leave/ })[0]
+    expect(firstCard.closest('li')!.querySelector('[data-testid="option-detail"]')).not.toBeNull()
+    expect(screen.getAllByTestId('option-detail')).toHaveLength(1)
   })
 
   it('adds fixture=1 from env', async () => {

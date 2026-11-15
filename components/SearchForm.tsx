@@ -11,15 +11,15 @@ export default function SearchForm() {
   const router = useRouter()
   const [start, setStart] = useState<Place | null>(null)
   const [dest, setDest] = useState<Place | null>(null)
-  const [locating, setLocating] = useState<Locating>('pending')
+  // No geolocation support is known up front, so it starts as 'denied' instead of being set in the effect.
+  const [locating, setLocating] = useState<Locating>(() =>
+    typeof navigator !== 'undefined' && !navigator.geolocation ? 'denied' : 'pending',
+  )
   // Once the rider types or picks a start, a late GPS fix must not overwrite it.
   const touchedStart = useRef(false)
 
   useEffect(() => {
-    if (!navigator.geolocation) {
-      setLocating('denied')
-      return
-    }
+    if (!navigator.geolocation) return
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         if (touchedStart.current) return
@@ -31,9 +31,11 @@ export default function SearchForm() {
         })
         setLocating('done')
       },
+      // Denial, unavailability and timeout all take the same path.
       () => {
         if (!touchedStart.current) setLocating('denied')
       },
+      { timeout: 10000, maximumAge: 60000 },
     )
   }, [])
 

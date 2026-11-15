@@ -81,6 +81,52 @@ describe('SearchForm', () => {
     expect(input('Start').value).toBe('')
   })
 
+  it('asks for a position with a 10 s timeout and 60 s maximum age', () => {
+    const spy = vi.fn()
+    geo(spy)
+    render(<SearchForm />)
+    expect(spy).toHaveBeenCalledTimes(1)
+    expect(spy.mock.calls[0][2]).toEqual({ timeout: 10000, maximumAge: 60000 })
+  })
+
+  it('a geolocation timeout follows the denied path', async () => {
+    geo((_ok, err) => err({ code: 3, TIMEOUT: 3 } as GeolocationPositionError))
+    render(<SearchForm />)
+    expect(await screen.findByText('Location unavailable. Type a start.')).toBeTruthy()
+    expect(input('Start').value).toBe('')
+    expect(screen.queryByText('Locating…')).toBeNull()
+  })
+
+  it('without geolocation support, shows the denied message from the first render', () => {
+    Object.defineProperty(globalThis.navigator, 'geolocation', { configurable: true, value: undefined })
+    render(<SearchForm />)
+    expect(screen.getByText('Location unavailable. Type a start.')).toBeTruthy()
+    expect(input('Start').value).toBe('')
+  })
+
+  it('closes the suggestion list on blur and drops aria-controls while closed', async () => {
+    located()
+    const user = userEvent.setup()
+    render(<SearchForm />)
+    await user.click(input('Start'))
+    await user.type(input('Start'), 'chur')
+    await waitFor(() => expect(screen.getByRole('listbox')).toBeTruthy())
+    expect(input('Start').getAttribute('aria-controls')).toBe(screen.getByRole('listbox').id)
+    await user.click(document.body)
+    expect(screen.queryByRole('listbox')).toBeNull()
+    expect(input('Start').getAttribute('aria-expanded')).toBe('false')
+    expect(input('Start').hasAttribute('aria-controls')).toBe(false)
+  })
+
+  it('a click on a suggestion still selects it (no blur-close race)', async () => {
+    located()
+    const user = userEvent.setup()
+    render(<SearchForm />)
+    await user.type(input('Destination'), 'chur')
+    await user.click(await screen.findByRole('option', { name: /Church Rd/ }))
+    expect(input('Destination').value).toBe('Church Rd')
+  })
+
   it('shows Your location and Locating hint while pending', () => {
     geo(() => {})
     render(<SearchForm />)

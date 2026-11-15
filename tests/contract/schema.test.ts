@@ -12,13 +12,13 @@ describe('contract schema', () => {
   });
 
   it('rejects a string fare amount', () => {
-    const bad = structuredClone(fixture) as any;
+    const bad = structuredClone(fixture) as { options: { fare: Record<string, unknown> }[] };
     bad.options[0].fare.amount = '3';
     expect(() => PlanResponse.parse(bad)).toThrow();
   });
 
   it('rejects timestamps without an offset', () => {
-    const bad = structuredClone(fixture) as any;
+    const bad = structuredClone(fixture) as Record<string, unknown>;
     bad.generatedAt = '2026-11-14T18:02:00';
     expect(() => PlanResponse.parse(bad)).toThrow();
   });

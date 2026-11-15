@@ -8,7 +8,6 @@ import { PlanResponse } from '@/src/contract/schema'
 import { parseLatLng } from '@/src/geo/geo'
 import LiveBanner from '@/components/LiveBanner'
 import OptionList from '@/components/OptionList'
-import OptionDetail from '@/components/OptionDetail'
 
 const TripMap = dynamic(() => import('@/components/TripMap'), { ssr: false })
 
@@ -71,9 +70,6 @@ function Results() {
     )
   }
 
-  const selected =
-    state.kind === 'ok' ? (state.plan.options.find((o) => o.id === selectedId) ?? null) : null
-
   return (
     <div className="mx-auto flex h-dvh w-full max-w-md flex-col">
       <header className="flex min-h-12 items-center gap-3 px-4 py-2">
@@ -123,7 +119,6 @@ function Results() {
                   Show walking
                 </label>
                 <OptionList options={state.plan.options} selectedId={selectedId} onSelect={setSelectedId} />
-                {selected && <OptionDetail option={selected} />}
               </>
             )}
           </>
