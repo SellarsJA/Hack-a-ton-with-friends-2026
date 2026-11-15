@@ -84,7 +84,7 @@ function Results() {
   }
 
   return (
-    <div className="mx-auto flex h-dvh w-full max-w-md flex-col">
+    <div className="mx-auto flex h-[calc(100dvh-3rem-env(safe-area-inset-bottom))] w-full max-w-md flex-col">
       <header className="flex min-h-12 items-center gap-3 px-4 py-2">
         <Link href="/" aria-label="Back" className="flex h-12 w-12 items-center justify-center text-xl">
           ←
