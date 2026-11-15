@@ -14,6 +14,7 @@ export async function searchIndex(db: Db, q: string): Promise<SearchResponse> {
   if (term.length < MIN_QUERY_LENGTH) return { stops: [], routes: [] }
   const like = escapeLike(term)
   const [stops, routes] = await Promise.all([
+    // Only stops with scheduled service: entrances, elevators and retired duplicates have none.
     // One row per name: a station's platforms share a name and would otherwise fill every slot.
     // Stations rank first (LRT names end in "Station", Valley Line ones in "Stop"; not "Station Drive"), then transit
     // centres, then names that start with what was typed, then the rest.
@@ -21,6 +22,7 @@ export async function searchIndex(db: Db, q: string): Promise<SearchResponse> {
       `select stop_id, name, lat, lon from (
          select distinct on (name) stop_id, name, lat, lon from stops
          where name ilike '%' || $1 || '%' escape '\\'
+           and exists (select 1 from stop_times st where st.stop_id = stops.stop_id)
          order by name, stop_id
        ) s
        order by case

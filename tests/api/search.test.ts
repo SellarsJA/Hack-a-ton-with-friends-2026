@@ -24,7 +24,7 @@ describe('search', () => {
     expect(await searchIndex(db, '%%')).toEqual({ stops: [], routes: [] })
   })
 
-  it('lists each name once, stations first, then transit centres, then prefix matches', async () => {
+  it('lists each served name once, stations first, then transit centres, then prefix matches', async () => {
     const db = await makeTestDb()
     const rows: [string, string][] = [
       ['z1', 'Aaa Zed Road'],
@@ -33,9 +33,14 @@ describe('search', () => {
       ['z4', 'Zed Station'],
       ['z5', 'Zed Transit Centre'],
       ['z6', 'Zed Stop'],
+      ['z7', 'Zed Station North Entrance'],
     ]
-    for (const [id, name] of rows)
+    const served = new Set(['z1', 'z2', 'z3', 'z4', 'z5', 'z6'])
+    for (const [id, name] of rows) {
       await db.query(`insert into stops (stop_id, name, lat, lon) values ($1, $2, 53.5, -113.5)`, [id, name])
+      if (served.has(id))
+        await db.query(`insert into stop_times (trip_id, stop_sequence, stop_id, arr, dep) values ($1, 1, $2, 0, 0)`, [`t-${id}`, id])
+    }
     const r = await searchIndex(db, 'zed')
     expect(r.stops.map((s) => s.name)).toEqual([
       'Zed Station',
