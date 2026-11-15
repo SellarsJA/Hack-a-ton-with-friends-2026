@@ -15,33 +15,47 @@ with o(stop_id, walk_s) as (select * from unnest($1::text[], $2::int[])),
      d(stop_id, walk_s) as (select * from unnest($3::text[], $4::int[])),
      days(service_date, now_s) as (select * from unnest($5::date[], $6::int[])),
 leg1 as (
-  select t.trip_id, t.route_id, days.service_date, so.stop_id b_stop, so.stop_sequence b_seq, so.dep b_dep, o.walk_s b_walk,
+  -- each leg is driven through the stop_times (stop_id, dep|arr) indexes, then collapsed
+  -- to the best boarding per (trip, date, transfer stop): the objective splits per leg
+  select distinct on (t.trip_id, days.service_date, sx.stop_sequence)
+         t.trip_id, t.route_id, days.service_date, days.now_s, so.stop_id b_stop, so.stop_sequence b_seq, so.dep b_dep, o.walk_s b_walk,
          sx.stop_id x_stop, sx.stop_sequence x_seq, sx.arr x_arr
-  from days join service_dates sd on sd.date = days.service_date
-  join trips t on t.service_id = sd.service_id
-  join stop_times so on so.trip_id = t.trip_id
-  join o on o.stop_id = so.stop_id and so.dep between days.now_s + o.walk_s - 1800 and days.now_s + 5400
-  join stop_times sx on sx.trip_id = t.trip_id and sx.stop_sequence > so.stop_sequence),
+  from o cross join days
+  cross join lateral (
+    select s.trip_id, s.stop_id, s.stop_sequence, s.dep from stop_times s
+    where s.stop_id = o.stop_id and s.dep between days.now_s + o.walk_s - 1800 and days.now_s + 5400) so
+  join trips t on t.trip_id = so.trip_id
+  join service_dates sd on sd.service_id = t.service_id and sd.date = days.service_date
+  join stop_times sx on sx.trip_id = so.trip_id and sx.stop_sequence > so.stop_sequence
+  order by t.trip_id, days.service_date, sx.stop_sequence, so.dep - o.walk_s desc),
 leg2 as (
-  select t.trip_id, t.route_id, days.service_date, sy.stop_id y_stop, sy.stop_sequence y_seq, sy.dep y_dep,
+  select distinct on (t.trip_id, days.service_date, sy.stop_sequence)
+         t.trip_id, t.route_id, days.service_date, sy.stop_id y_stop, sy.stop_sequence y_seq, sy.dep y_dep,
          sa.stop_id a_stop, sa.stop_sequence a_seq, sa.arr a_arr, d.walk_s a_walk
-  from days join service_dates sd on sd.date = days.service_date
-  join trips t on t.service_id = sd.service_id
-  join stop_times sa on sa.trip_id = t.trip_id
-  join d on d.stop_id = sa.stop_id and sa.arr between days.now_s and days.now_s + 10800
-  join stop_times sy on sy.trip_id = t.trip_id and sy.stop_sequence < sa.stop_sequence)
-select distinct on (leg1.trip_id, leg1.service_date, leg2.trip_id)
-  leg1.trip_id t1_trip, leg1.service_date::text service_date,
-  leg1.b_stop, leg1.b_seq, leg1.b_dep, leg1.x_stop, leg1.x_seq, leg1.x_arr,
-  leg2.trip_id t2_trip, leg2.y_stop, leg2.y_seq, leg2.y_dep, leg2.a_stop, leg2.a_seq, leg2.a_arr,
-  l.walk_s x_walk
-from leg1
-join stop_links l on l.from_stop = leg1.x_stop
-join leg2 on leg2.y_stop = l.to_stop and leg2.service_date = leg1.service_date
-  and leg2.route_id <> leg1.route_id
-  and leg2.y_dep between leg1.x_arr + l.walk_s + 60 and leg1.x_arr + 5400
-order by leg1.trip_id, leg1.service_date, leg2.trip_id, (leg2.a_arr + leg2.a_walk) - (leg1.b_dep - leg1.b_walk)
-limit 300`
+  from d cross join days
+  cross join lateral (
+    select s.trip_id, s.stop_id, s.stop_sequence, s.arr from stop_times s
+    where s.stop_id = d.stop_id and s.arr between days.now_s and days.now_s + 10800) sa
+  join trips t on t.trip_id = sa.trip_id
+  join service_dates sd on sd.service_id = t.service_id and sd.date = days.service_date
+  join stop_times sy on sy.trip_id = sa.trip_id and sy.stop_sequence < sa.stop_sequence
+  order by t.trip_id, days.service_date, sy.stop_sequence, sa.arr + d.walk_s)
+select * from (
+  select distinct on (leg1.trip_id, leg1.service_date, leg2.trip_id)
+    leg1.trip_id t1_trip, leg1.service_date::text service_date, leg1.now_s,
+    leg1.b_stop, leg1.b_seq, leg1.b_dep, leg1.b_walk, leg1.x_stop, leg1.x_seq, leg1.x_arr,
+    leg2.trip_id t2_trip, leg2.y_stop, leg2.y_seq, leg2.y_dep, leg2.a_stop, leg2.a_seq, leg2.a_arr, leg2.a_walk,
+    l.walk_s x_walk
+  from leg1
+  join stop_links l on l.from_stop = leg1.x_stop
+  join leg2 on leg2.y_stop = l.to_stop and leg2.service_date = leg1.service_date
+    and leg2.route_id <> leg1.route_id
+    and leg2.y_dep between leg1.x_arr + l.walk_s + 60 and leg1.x_arr + 5400
+  order by leg1.trip_id, leg1.service_date, leg2.trip_id,
+    (leg2.a_arr + leg2.a_walk) - (leg1.b_dep - leg1.b_walk), (leg2.y_dep - leg1.x_arr - l.walk_s) desc
+) best
+order by (b_dep - b_walk < now_s), (a_arr + a_walk) - now_s, t1_trip, t2_trip
+limit $7`
 
 const TRIPS_SQL = `
 select t.trip_id, t.route_id, r.agency_id, r.short_name, r.route_type, t.headsign, t.shape_id
@@ -86,6 +100,7 @@ export async function findTransferCandidates(
   origin: NearbyStop[],
   dest: NearbyStop[],
   days: { serviceDate: string; nowSeconds: number }[],
+  limit = 300,
 ): Promise<TransferCandidate[]> {
   if (origin.length === 0 || dest.length === 0 || days.length === 0) return []
   const rows = await db.query<Row>(TRANSFER_SQL, [
@@ -95,6 +110,7 @@ export async function findTransferCandidates(
     dest.map((s) => s.walkSeconds),
     days.map((d) => d.serviceDate),
     days.map((d) => d.nowSeconds),
+    limit,
   ])
   if (rows.length === 0) return []
 

@@ -10,3 +10,4 @@ create table if not exists shapes (shape_id text primary key, points jsonb not n
 create table if not exists feed_meta (feed_version text, window_start date, window_end date, imported_at timestamptz default now());
 create table if not exists stop_links (from_stop text not null, to_stop text not null, walk_s int not null, primary key (from_stop, to_stop));
 create index if not exists stop_links_to on stop_links (to_stop);
+create index if not exists stop_times_stop_arr on stop_times (stop_id, arr);

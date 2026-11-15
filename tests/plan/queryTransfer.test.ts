@@ -66,6 +66,32 @@ describe('findTransferCandidates', () => {
     expect(pairs(c)).not.toContain('A>H')
   })
 
+  it('ranks by door-to-door arrival before limiting, not by trip id', async () => {
+    const o = await findNearbyStops(db, CHURCHILL, 300)
+    const mw = await findNearbyStops(db, MILL_WOODS, 300)
+    const vs = await findNearbyStops(db, VALLEY_SOUTH, 300)
+    const days = at('2026-11-14T18:00:00')
+    // sanity: with plain walks, E arrives first and is also lexically first
+    expect(pairs(await findTransferCandidates(db, o, [...mw, ...vs], days))).toEqual(['A>E', 'A>F'])
+    // a long walk from Mill Woods makes F (A>F) the fastest even though E sorts first
+    const slowMw = mw.map((s) => ({ ...s, walkSeconds: 3000 }))
+    const all = await findTransferCandidates(db, o, [...slowMw, ...vs], days)
+    expect(pairs(all)).toEqual(['A>F', 'A>E'])
+    expect(pairs(await findTransferCandidates(db, o, [...slowMw, ...vs], days, 1))).toEqual(['A>F'])
+  })
+
+  it('keeps the transfer point with more spare time for the same trip pair', async () => {
+    const o = await findNearbyStops(db, CHURCHILL, 300)
+    const d = await findNearbyStops(db, { lat: 53.4891, lon: -113.5137 }, 100) // Far Stop 1006
+    expect(d.map((s) => s.stopId)).toEqual(['1006'])
+    const c = await findTransferCandidates(db, o, d, at('2026-11-14T18:00:00'))
+    // A>J can transfer at 1003 (spare 300 s) or 1002 (spare 600 s): same door-to-door time
+    expect(pairs(c)).toEqual(['A>J'])
+    expect(c[0].first.alight.stopId).toBe('1002')
+    expect(c[0].second.board).toMatchObject({ stopId: '1002', dep: 18 * 3600 + 2400 })
+    expect(c[0].transferWalkSeconds).toBe(0)
+  })
+
   it('returns [] without querying when origin, dest or days is empty', async () => {
     const boom: Db = {
       query: () => {

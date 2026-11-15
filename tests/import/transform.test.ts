@@ -12,8 +12,8 @@ const opts = { startDate: '2026-11-14', days: 7 }
 describe('transformFeed', () => {
   it('keeps A and D, drops B (removed) and C (outside window)', async () => {
     const r = await transformFeed(open, opts)
-    expect(r.trips.map((t) => t.tripId).sort()).toEqual(['A', 'D', 'E', 'F', 'G', 'H'])
-    expect(new Set(r.stopTimes.map((s) => s.tripId))).toEqual(new Set(['A', 'D', 'E', 'F', 'G', 'H']))
+    expect(r.trips.map((t) => t.tripId).sort()).toEqual(['A', 'D', 'E', 'F', 'G', 'H', 'J'])
+    expect(new Set(r.stopTimes.map((s) => s.tripId))).toEqual(new Set(['A', 'D', 'E', 'F', 'G', 'H', 'J']))
     expect(r.serviceDates).toEqual([
       { serviceId: 'WK', date: '2026-11-14' },
       { serviceId: 'WK', date: '2026-11-15' },
