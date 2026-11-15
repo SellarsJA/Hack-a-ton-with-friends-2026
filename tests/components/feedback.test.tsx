@@ -98,6 +98,16 @@ describe('FeedbackForm', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Clear Bus position on the map' }))
     expect(screen.getAllByText('Not rated').length).toBe(2)
   })
+  it('exposes Not rated as aria-valuetext', () => {
+    render(<FeedbackForm ride={ride} />)
+    expect(screen.getByLabelText('Departure and arrival times').getAttribute('aria-valuetext')).toBe('Not rated')
+  })
+  it('pointer-up on an untouched slider records 3', () => {
+    render(<FeedbackForm ride={ride} />)
+    const input = screen.getByLabelText('Departure and arrival times')
+    fireEvent.pointerUp(input)
+    expect(input.getAttribute('aria-valuetext')).toBe('3 of 5')
+  })
   it('shows 400 and network errors', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 400, json: async () => ({}) }))
     render(<FeedbackForm ride={ride} />)

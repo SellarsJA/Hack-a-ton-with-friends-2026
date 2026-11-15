@@ -27,15 +27,40 @@ body {
 
 /* Ride feedback sliders: 44px touch target for the thumb. */
 .feedback-range {
+  -webkit-appearance: none;
+  appearance: none;
   height: 44px;
   background: transparent;
-  accent-color: #1d4ed8;
+  cursor: pointer;
+}
+.feedback-range:focus-visible {
+  outline: 2px solid #1d4ed8;
+  outline-offset: 2px;
+}
+.feedback-range::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 4px;
+  background: #a1a1aa;
+}
+.feedback-range::-moz-range-track {
+  height: 8px;
+  border-radius: 4px;
+  background: #a1a1aa;
 }
 .feedback-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
   height: 44px;
   width: 44px;
+  margin-top: -18px;
+  border-radius: 9999px;
+  border: 0;
+  background: #1d4ed8;
 }
 .feedback-range::-moz-range-thumb {
   height: 44px;
   width: 44px;
+  border-radius: 9999px;
+  border: 0;
+  background: #1d4ed8;
 }

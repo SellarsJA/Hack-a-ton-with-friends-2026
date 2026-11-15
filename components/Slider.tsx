@@ -22,6 +22,7 @@ export default function Slider({
         max={5}
         step={1}
         value={value ?? 3}
+        aria-valuetext={value === undefined ? 'Not rated' : `${value} of 5`}
         onChange={(e) => onChange(Number(e.target.value))}
         onPointerUp={(e) => {
           // Tapping the untouched default (3) fires no change event, so record it here.
