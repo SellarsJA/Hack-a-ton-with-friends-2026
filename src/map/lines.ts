@@ -37,6 +37,25 @@ export function buildLineFeatures(
   return { type: 'FeatureCollection', features }
 }
 
+export type MapEndpoint = { role: 'start' | 'destination'; lngLat: [number, number] }
+
+/** First point of the first leg, and last point of the last leg. [lon, lat]. */
+export function endpointMarkers(option: Option | undefined): MapEndpoint[] {
+  if (!option) return []
+  let first: [number, number] | null = null
+  let last: [number, number] | null = null
+  for (const leg of option.legs) {
+    if (leg.path.length === 0) continue
+    if (!first) first = leg.path[0]
+    last = leg.path[leg.path.length - 1]
+  }
+  if (!first || !last) return []
+  return [
+    { role: 'start', lngLat: [first[1], first[0]] },
+    { role: 'destination', lngLat: [last[1], last[0]] },
+  ]
+}
+
 export function labelPoints(
   options: Option[],
 ): { optionId: string; lngLat: [number, number]; text: string }[] {

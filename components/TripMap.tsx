@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react'
 import * as maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type { Option } from '@/src/contract/schema'
-import { buildLineFeatures, labelPoints, boundsFor } from '@/src/map/lines'
+import { buildLineFeatures, endpointMarkers, labelPoints, boundsFor } from '@/src/map/lines'
 import { tomtomRasterUrl, tomtomCopyrightUrl, attributionOptions } from '@/src/tomtom/tiles'
 
 type Props = {
@@ -12,6 +12,8 @@ type Props = {
   selectedId: string | null
   showWalking: boolean
   onSelect: (optionId: string) => void
+  fromLabel?: string
+  toLabel?: string
 }
 
 const SOURCE = 'lines'
@@ -33,6 +35,23 @@ function fitRoute(map: maplibregl.Map, options: Option[]) {
   )
 }
 
+function placeTag(text: string, role: 'start' | 'destination') {
+  const el = document.createElement('div')
+  el.dataset.role = role
+  el.setAttribute('aria-label', `${role}: ${text}`)
+  el.style.cssText = 'display:flex;align-items:center;gap:4px;pointer-events:none;max-width:180px'
+  const dot = document.createElement('span')
+  dot.textContent = role === 'start' ? 'A' : 'B'
+  const fill = role === 'start' ? '#15803D' : '#B91C1C'
+  dot.style.cssText = `flex:none;display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:9999px;background:${fill};color:#fff;font:700 11px system-ui,sans-serif;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.45)`
+  const name = document.createElement('span')
+  name.textContent = text
+  name.style.cssText =
+    'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:#fff;color:#111827;border:1px solid #111827;border-radius:9999px;padding:1px 6px;font:600 11px system-ui,sans-serif'
+  el.append(dot, name)
+  return el
+}
+
 function styleFor(key: string): maplibregl.StyleSpecification {
   return {
     version: 8,
@@ -41,12 +60,20 @@ function styleFor(key: string): maplibregl.StyleSpecification {
   }
 }
 
-export default function TripMap({ options, selectedId, showWalking, onSelect }: Props) {
+export default function TripMap({
+  options,
+  selectedId,
+  showWalking,
+  onSelect,
+  fromLabel = 'Start',
+  toLabel = 'Destination',
+}: Props) {
   const key = process.env.NEXT_PUBLIC_TOMTOM_KEY
   const container = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const loadedRef = useRef(false)
   const markersRef = useRef<maplibregl.Marker[]>([])
+  const endsRef = useRef<maplibregl.Marker[]>([])
   const onSelectRef = useRef(onSelect)
   const latest = useRef({ options, selectedId, showWalking })
 
@@ -133,6 +160,8 @@ export default function TripMap({ options, selectedId, showWalking, onSelect }: 
       loadedRef.current = false
       markersRef.current.forEach((m) => m.remove())
       markersRef.current = []
+      endsRef.current.forEach((m) => m.remove())
+      endsRef.current = []
       map.remove()
       mapRef.current = null
     }
@@ -174,6 +203,19 @@ export default function TripMap({ options, selectedId, showWalking, onSelect }: 
       return new maplibregl.Marker({ element: el }).setLngLat(p.lngLat).addTo(map)
     })
   }, [options, key])
+
+  // Start and destination sit on the ends of the selected trip. The route pill is only the middle label.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    endsRef.current.forEach((m) => m.remove())
+    const option = options.find((o) => o.id === selectedId) ?? options[0]
+    endsRef.current = endpointMarkers(option).map((p) => {
+      const text = p.role === 'start' ? fromLabel : toLabel
+      const el = placeTag(text, p.role)
+      return new maplibregl.Marker({ element: el, anchor: 'left', offset: [4, 0] }).setLngLat(p.lngLat).addTo(map)
+    })
+  }, [options, selectedId, fromLabel, toLabel, key])
 
   useEffect(() => {
     for (const m of markersRef.current) {

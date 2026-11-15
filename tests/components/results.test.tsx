@@ -128,7 +128,9 @@ describe('results page', () => {
     render(<ResultsPage />)
     expect(screen.getByText('Finding trips…')).toBeTruthy()
     expect((await screen.findAllByRole('button', { name: /Leave/ })).length).toBe(3)
-    expect(screen.getByText('Churchill → Southgate')).toBeTruthy()
+    const heading = screen.getByRole('heading', { name: /Churchill/ })
+    expect(heading.textContent).toContain('Churchill')
+    expect(heading.textContent).toContain('Southgate')
     const url = f.mock.calls[0][0] as string
     expect(url).toContain('/api/plan?from=53.5%2C-113.5&to=53.4%2C-113.4')
     expect(url).not.toContain('fixture')
@@ -141,6 +143,16 @@ describe('results page', () => {
     const firstCard = screen.getAllByRole('button', { name: /Leave/ })[0]
     expect(firstCard.closest('li')!.querySelector('[data-testid="option-detail"]')).not.toBeNull()
     expect(screen.getAllByTestId('option-detail')).toHaveLength(1)
+  })
+
+  it('keeps a long start from hiding the destination', async () => {
+    search =
+      'from=53.5,-113.5&to=53.4,-113.4&fromLabel=Churchill+Square+At+100+St+%26+102+Ave&toLabel=Southgate+Station'
+    mockFetch(() => ok(fixture))
+    render(<ResultsPage />)
+    const heading = await screen.findByRole('heading', { name: /Southgate Station/ })
+    expect(heading.textContent).toContain('Churchill Square At 100 St & 102 Ave')
+    expect(heading.textContent).toContain('→ Southgate Station')
   })
 
   it('adds fixture=1 from env', async () => {

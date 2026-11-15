@@ -76,7 +76,10 @@ function Results() {
         <Link href="/" aria-label="Back" className="flex h-12 w-12 items-center justify-center text-xl">
           ←
         </Link>
-        <h1 className="min-w-0 flex-1 truncate text-base font-semibold">{`${fromLabel} → ${toLabel}`}</h1>
+        <h1 className="min-w-0 flex-1 text-sm font-semibold leading-snug">
+          <span className="block truncate">{fromLabel}</span>
+          <span className="block truncate">{`→ ${toLabel}`}</span>
+        </h1>
       </header>
       <div className="h-[45%] shrink-0 bg-zinc-200 dark:bg-zinc-800">
         {state.kind === 'ok' && state.plan.options.length > 0 && (
@@ -85,6 +88,8 @@ function Results() {
             selectedId={selectedId}
             showWalking={showWalking}
             onSelect={setSelectedId}
+            fromLabel={fromLabel}
+            toLabel={toLabel}
           />
         )}
       </div>

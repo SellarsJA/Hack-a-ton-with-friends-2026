@@ -34,9 +34,12 @@ vi.mock('maplibre-gl', () => {
       return this
     }
     addTo() {
+      document.body.appendChild(this.el)
       return this
     }
-    remove() {}
+    remove() {
+      this.el.remove()
+    }
     getElement() {
       return this.el
     }
@@ -62,5 +65,27 @@ describe('TripMap', () => {
     render(<TripMap options={plan.options} selectedId={plan.options[0].id} showWalking onSelect={() => {}} />)
     expect(fitBounds).toHaveBeenCalled()
     expect(fitBounds.mock.calls.at(-1)?.[1]).toMatchObject({ maxZoom: 16, padding: 40, animate: false })
+  })
+
+  it('tags both the start and the destination, not only the route pill', () => {
+    vi.stubEnv('NEXT_PUBLIC_TOMTOM_KEY', 'k1')
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})))
+    const plan = PlanResponse.parse(fixture)
+    render(
+      <TripMap
+        options={plan.options}
+        selectedId={plan.options[0].id}
+        showWalking
+        onSelect={() => {}}
+        fromLabel="Churchill Square"
+        toLabel="Southgate Station"
+      />,
+    )
+    expect(document.body.textContent).toContain('Churchill Square')
+    expect(document.body.textContent).toContain('Southgate Station')
+    expect(document.querySelector('[data-role="start"]')?.getAttribute('aria-label')).toBe('start: Churchill Square')
+    expect(document.querySelector('[data-role="destination"]')?.getAttribute('aria-label')).toBe(
+      'destination: Southgate Station',
+    )
   })
 })

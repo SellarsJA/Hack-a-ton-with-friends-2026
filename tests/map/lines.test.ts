@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import fixture from '@/fixtures/plan.json'
 import { PlanResponse } from '@/src/contract/schema'
-import { OPTION_COLORS, buildLineFeatures, labelPoints, boundsFor } from '@/src/map/lines'
+import { OPTION_COLORS, buildLineFeatures, endpointMarkers, labelPoints, boundsFor } from '@/src/map/lines'
 
 const { options } = PlanResponse.parse(fixture)
 const props = (fc: GeoJSON.FeatureCollection) => fc.features.map((f) => f.properties!)
@@ -44,6 +44,22 @@ describe('labelPoints', () => {
     const leg = options[0].legs.find((l) => l.mode !== 'walk')!
     const [lat, lon] = leg.path[Math.floor(leg.path.length / 2)]
     expect(labelPoints(options)[0].lngLat).toEqual([lon, lat])
+  })
+})
+
+describe('endpointMarkers', () => {
+  it('marks the first point and the last point as [lon, lat]', () => {
+    const legs = options[0].legs.filter((l) => l.path.length > 0)
+    const [lat0, lon0] = legs[0].path[0]
+    const [lat1, lon1] = legs[legs.length - 1].path.at(-1)!
+    expect(endpointMarkers(options[0])).toEqual([
+      { role: 'start', lngLat: [lon0, lat0] },
+      { role: 'destination', lngLat: [lon1, lat1] },
+    ])
+  })
+  it('returns nothing when every leg has an empty path', () => {
+    const empty = { ...options[0], legs: options[0].legs.map((l) => ({ ...l, path: [] as [number, number][] })) }
+    expect(endpointMarkers(empty)).toEqual([])
   })
 })
 
