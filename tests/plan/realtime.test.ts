@@ -60,6 +60,26 @@ describe('applyRealtime', () => {
     expect(r.vehicleLabel).toBeNull()
   })
 
+  it('uses a stop\'s own delay when it has no times', () => {
+    const live = liveWith({
+      stops: [{ stopSequence: 5, stopId: 'A', arrival: null, departure: null, delay: 90 }],
+      vehicle: null,
+    })
+    const r = applyRealtime(leg, live)
+    expect(r.departEpoch).toBe(depEpoch + 90)
+    expect(r.realtime).toBe(true)
+  })
+
+  it('ignores seq-less stops in upstream propagation', () => {
+    const live = liveWith({
+      stops: [{ stopSequence: 0, stopId: 'Z', arrival: null, departure: null, delay: 300 }],
+      vehicle: null,
+    })
+    const r = applyRealtime(leg, live)
+    expect(r.departEpoch).toBe(depEpoch)
+    expect(r.realtime).toBe(false)
+  })
+
   it('falls back to schedule when the trip is absent', () => {
     const live: LiveIndex = { feedTimestamp: 0, trips: new Map(), alerts: [] }
     expect(applyRealtime(leg, live)).toEqual({

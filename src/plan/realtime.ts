@@ -27,10 +27,11 @@ function resolve(
   if (exact) {
     const t = pick(exact)
     if (t != null) return { epoch: t, live: true }
+    if (exact.delay != null) return { epoch: scheduled + exact.delay, live: true }
   }
   let upstream: StopLive | undefined
   for (const s of stops) {
-    if (s.stopSequence < stop.seq && s.delay != null) upstream = s
+    if (s.stopSequence > 0 && s.stopSequence < stop.seq && s.delay != null) upstream = s
   }
   if (upstream && upstream.delay != null) return { epoch: scheduled + upstream.delay, live: true }
   return { epoch: scheduled, live: false }
