@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "csv-parse": "^7.0.3",
+    "gtfs-realtime-bindings": "^2.2.0",
     "luxon": "^3.7.2",
     "next": "16.4.6",
     "postgres": "^4.1.1",
