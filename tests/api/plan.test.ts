@@ -4,6 +4,7 @@ import { NextRequest } from 'next/server'
 import { planTrip, type PlanDeps } from '@/src/plan/plan'
 import { searchIndex } from '@/src/plan/search'
 import { PlanResponse, SearchResponse } from '@/src/contract/schema'
+import { decodeLiveKey } from '@/src/plan/liveKey'
 import { makeTestDb } from '../helpers/pgliteDb'
 import { __resetLiveCacheForTests, getLiveIndex } from '@/src/live/cache'
 import { ZONE } from '@/src/time/edmonton'
@@ -29,6 +30,8 @@ function deps(o: Partial<PlanDeps> = {}): PlanDeps {
     db: { query: async () => [] },
     findNearbyStops: async (_db, p) => [stop(p === from ? 'A' : 'B', p.lat, p.lon)],
     findDirectCandidates: async () => [cand],
+    findTransferCandidates: async () => [],
+    nextDepartures: async () => [],
     loadShapes: async () => new Map(),
     getLiveIndex: async () => null,
     now: () => now,
@@ -120,9 +123,12 @@ describe('smoke (gtfs-mini)', () => {
     __resetLiveCacheForTests()
     const db = await makeTestDb()
     const { findNearbyStops, findDirectCandidates } = await import('@/src/plan/query')
+    const { findTransferCandidates } = await import('@/src/plan/queryTransfer')
+    const { nextDepartures } = await import('@/src/plan/departures')
     const { loadShapes } = await import('@/src/plan/plan')
     const r = await planTrip(from, to, {
-      db, findNearbyStops, findDirectCandidates, loadShapes, getLiveIndex: () => getLiveIndex(), now: () => now,
+      db, findNearbyStops, findDirectCandidates, findTransferCandidates, nextDepartures, loadShapes,
+      getLiveIndex: () => getLiveIndex(), now: () => now,
     })
     expect(PlanResponse.parse(r).options.length).toBeGreaterThanOrEqual(1)
     const s = SearchResponse.parse(await searchIndex(db, 'churchill'))
@@ -132,13 +138,42 @@ describe('smoke (gtfs-mini)', () => {
   it('drops trip A at 18:09 from ~600 m away when it is not late (excluded in assembly)', async () => {
     const db = await makeTestDb()
     const { findNearbyStops, findDirectCandidates } = await import('@/src/plan/query')
+    const { findTransferCandidates } = await import('@/src/plan/queryTransfer')
+    const { nextDepartures } = await import('@/src/plan/departures')
     const { loadShapes } = await import('@/src/plan/plan')
     const far = { lat: 53.5498, lon: -113.4909 }
-    const base = { db, findNearbyStops, findDirectCandidates, loadShapes, getLiveIndex: async () => null }
+    const base = { db, findNearbyStops, findDirectCandidates, findTransferCandidates, nextDepartures, loadShapes, getLiveIndex: async () => null }
     const at = (iso: string) => () => DateTime.fromISO(iso, { zone: ZONE })
     const missed = await planTrip(far, to, { ...base, now: at('2026-11-14T18:09:00') })
     expect(PlanResponse.parse(missed).emptyReason).toBe('no_trips_soon')
     const caught = await planTrip(far, to, { ...base, now: at('2026-11-14T17:59:00') })
-    expect(PlanResponse.parse(caught).options.map((o) => o.legs.find((l) => l.mode !== 'walk')!.tripId)).toEqual(['A'])
+    expect(PlanResponse.parse(caught).options.filter((o) => o.transfer === null).map((o) => o.legs.find((l) => l.mode !== 'walk')!.tripId)).toEqual(['A'])
+  })
+
+  async function realDeps() {
+    const db = await makeTestDb()
+    const { findNearbyStops, findDirectCandidates } = await import('@/src/plan/query')
+    const { findTransferCandidates } = await import('@/src/plan/queryTransfer')
+    const { nextDepartures } = await import('@/src/plan/departures')
+    const { loadShapes } = await import('@/src/plan/plan')
+    return { db, findNearbyStops, findDirectCandidates, findTransferCandidates, nextDepartures, loadShapes, getLiveIndex: async () => null, now: () => now }
+  }
+
+  it('offers the A>E transfer from Churchill to Mill Woods', async () => {
+    const r = PlanResponse.parse(await planTrip(from, { lat: 53.457, lon: -113.428 }, await realDeps()))
+    const o = r.options.find((x) => x.legs.some((l) => l.mode !== 'walk' && l.tripId === 'E'))!
+    expect(o.transfer).not.toBeNull()
+    const key = decodeLiveKey(o.liveKey)!
+    expect(key.legs.map((l) => l.t)).toEqual(['A', 'E'])
+  })
+
+  it('offers the A>F transfer with a 3 minute walk and a scheduled rail leg', async () => {
+    const r = PlanResponse.parse(await planTrip(from, { lat: 53.462, lon: -113.45 }, await realDeps()))
+    const o = r.options.find((x) => x.legs.some((l) => l.mode !== 'walk' && l.tripId === 'F'))!
+    expect(o.legs.map((l) => l.mode)).toContain('rail')
+    const walkBetween = o.legs.find((l, i) => l.mode === 'walk' && i > 0 && i < o.legs.length - 1)!
+    expect(walkBetween).toMatchObject({ mode: 'walk', minutes: 3 })
+    expect(o.legs.filter((l) => l.mode !== 'walk').at(-1)).toMatchObject({ mode: 'rail', transferWalkMinutesBefore: 3 })
+    expect(o.transfer!.basedOn).toBe('scheduled')
   })
 })

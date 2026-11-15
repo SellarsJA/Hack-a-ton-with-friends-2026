@@ -1,10 +1,14 @@
 import { DateTime } from 'luxon'
 import type { LatLng, Leg, Option } from '@/src/contract/schema'
-import { fareFor, type ZoneId } from '@/src/fares/fare'
-import { sliceShape } from '@/src/geo/geo'
+import { fareFor } from '@/src/fares/fare'
 import type { LiveIndex } from '@/src/live/decode'
+import { iso, isRail, transitLeg, zoneOf, type Shapes } from '@/src/plan/legs'
+import { encodeLiveKey, liveKeyFor } from '@/src/plan/liveKey'
+import type { Departure } from '@/src/plan/departures'
 import type { Candidate } from '@/src/plan/query'
+import type { TransferCandidate } from '@/src/plan/queryTransfer'
 import { applyRealtime } from '@/src/plan/realtime'
+import { rankKey, transferStatus } from '@/src/plan/transfer'
 import { ZONE } from '@/src/time/edmonton'
 
 export type AssembleCtx = {
@@ -12,14 +16,27 @@ export type AssembleCtx = {
   to: LatLng
   live: LiveIndex | null
   nowEpoch: number
-  shapes: Map<string, [number, number][]>
+  shapes: Shapes
 }
 
-const ZONES = new Set<string>(['1EDM', '1AIR', '2STA', '4SCT', '5SGT', '6FST', '7BT', '9LT'])
-const zoneOf = (z: string | null): ZoneId => (z != null && ZONES.has(z) ? (z as ZoneId) : '1EDM')
+function alertsFor(live: LiveIndex | null, cands: Candidate[]): { headline: string }[] {
+  const headlines = new Set<string>()
+  for (const a of live?.alerts ?? []) {
+    for (const c of cands) {
+      if (
+        a.routeIds.includes(c.routeId) ||
+        a.stopIds.includes(c.board.stopId) ||
+        a.stopIds.includes(c.alight.stopId) ||
+        a.tripIds.includes(c.tripId)
+      ) {
+        headlines.add(a.headline)
+      }
+    }
+  }
+  return [...headlines].map((headline) => ({ headline }))
+}
 
-const iso = (epoch: number): string =>
-  DateTime.fromSeconds(epoch, { zone: ZONE }).toISO({ suppressMilliseconds: true }) as string
+const pt = (s: { lat: number; lon: number }): [number, number] => [s.lat, s.lon]
 
 export function assembleDirectOptions(cands: Candidate[], ctx: AssembleCtx): Option[] {
   const timed = cands
@@ -42,53 +59,17 @@ export function assembleDirectOptions(cands: Candidate[], ctx: AssembleCtx): Opt
     const leaveAt = rt.departEpoch - c.board.walkSeconds
     const boardPt = { lat: c.board.lat, lon: c.board.lon }
     const alightPt = { lat: c.alight.lat, lon: c.alight.lon }
-    const shape = c.shapeId ? ctx.shapes.get(c.shapeId) : undefined
     const legs: Leg[] = []
     if (c.board.walkSeconds > 0) {
-      legs.push({
-        mode: 'walk',
-        minutes: c.board.walkSeconds / 60,
-        path: [[ctx.from.lat, ctx.from.lon], [boardPt.lat, boardPt.lon]],
-      })
+      legs.push({ mode: 'walk', minutes: c.board.walkSeconds / 60, path: [[ctx.from.lat, ctx.from.lon], pt(boardPt)] })
     }
-    legs.push({
-      mode: c.routeType === 0 || c.routeType === 1 ? 'rail' : 'bus',
-      route: c.routeShortName ?? c.routeId,
-      headsign: c.headsign ?? '',
-      tripId: c.tripId,
-      serviceDate: c.serviceDate,
-      departAt: iso(rt.departEpoch),
-      arriveAt: iso(rt.arriveEpoch),
-      realtime: rt.realtime,
-      fromStop: c.board.name,
-      toStop: c.alight.name,
-      vehicleLabel: rt.vehicleLabel,
-      occupancy: rt.occupancy,
-      vehiclePosition: null,
-      transferWalkMinutesBefore: null,
-      path: shape ? sliceShape(shape, boardPt, alightPt) : [[boardPt.lat, boardPt.lon], [alightPt.lat, alightPt.lon]],
-    })
+    legs.push(transitLeg(c, rt, ctx.shapes))
     if (c.alight.walkSeconds > 0) {
-      legs.push({
-        mode: 'walk',
-        minutes: c.alight.walkSeconds / 60,
-        path: [[alightPt.lat, alightPt.lon], [ctx.to.lat, ctx.to.lon]],
-      })
-    }
-    const headlines = new Set<string>()
-    for (const a of ctx.live?.alerts ?? []) {
-      if (
-        a.routeIds.includes(c.routeId) ||
-        a.stopIds.includes(c.board.stopId) ||
-        a.stopIds.includes(c.alight.stopId) ||
-        a.tripIds.includes(c.tripId)
-      ) {
-        headlines.add(a.headline)
-      }
+      legs.push({ mode: 'walk', minutes: c.alight.walkSeconds / 60, path: [pt(alightPt), [ctx.to.lat, ctx.to.lon]] })
     }
     return {
       id: `opt-${i + 1}`,
-      liveKey: '', // placeholder until Task 6
+      liveKey: encodeLiveKey({ legs: [liveKeyFor(c)], tw: null }),
       leaveAt: iso(leaveAt),
       arriveAt: iso(finalArrive),
       durationMinutes: Math.ceil((finalArrive - leaveAt) / 60),
@@ -97,10 +78,99 @@ export function assembleDirectOptions(cands: Candidate[], ctx: AssembleCtx): Opt
         lastZone: zoneOf(c.alight.zone),
         legs: [{ agencyId: c.agencyId, routeShortName: c.routeShortName ?? '' }],
       }),
-      alerts: [...headlines].map((headline) => ({ headline })),
+      alerts: alertsFor(ctx.live, [c]),
       transfer: null,
       snow: [],
       legs,
     }
   })
+}
+
+export type NextDeparturesFn = (args: {
+  stopId: string
+  routeId?: string
+  afterEpoch: number
+  limit: number
+  live: LiveIndex | null
+}) => Promise<Departure[]>
+
+export async function assembleTransferOptions(
+  cands: TransferCandidate[],
+  ctx: AssembleCtx & { nextDepartures: NextDeparturesFn },
+): Promise<Option[]> {
+  const timed = cands
+    .map((tc) => ({ tc, rt1: applyRealtime(tc.first, ctx.live), rt2: applyRealtime(tc.second, ctx.live) }))
+    // Same catchability rule as direct options: the first bus must still be reachable on foot.
+    .filter((x) => x.rt1.departEpoch - x.tc.first.board.walkSeconds >= ctx.nowEpoch)
+
+  return Promise.all(
+    timed.map(async ({ tc, rt1, rt2 }): Promise<Option> => {
+      const { first, second, transferWalkSeconds: tw } = tc
+      const bothLive = rt1.realtime && rt2.realtime && !isRail(first) && !isRail(second)
+      const status = transferStatus(rt1.arriveEpoch, rt2.departEpoch, tw, bothLive)
+      let fallbackDepartAt: string | null = null
+      if (status.status === 'at_risk') {
+        const next = await ctx.nextDepartures({
+          stopId: second.board.stopId,
+          routeId: second.routeId,
+          afterEpoch: rt1.arriveEpoch + tw,
+          limit: 1,
+          live: ctx.live,
+        })
+        fallbackDepartAt = next.length > 0 ? iso(next[0].departEpoch) : null
+      }
+
+      const leaveAt = rt1.departEpoch - first.board.walkSeconds
+      const finalArrive = rt2.arriveEpoch + second.alight.walkSeconds
+      const legs: Leg[] = []
+      if (first.board.walkSeconds > 0) {
+        legs.push({ mode: 'walk', minutes: first.board.walkSeconds / 60, path: [[ctx.from.lat, ctx.from.lon], pt(first.board)] })
+      }
+      legs.push(transitLeg(first, rt1, ctx.shapes))
+      if (tw > 0) legs.push({ mode: 'walk', minutes: tw / 60, path: [pt(first.alight), pt(second.board)] })
+      legs.push(transitLeg(second, rt2, ctx.shapes, tw / 60))
+      if (second.alight.walkSeconds > 0) {
+        legs.push({ mode: 'walk', minutes: second.alight.walkSeconds / 60, path: [pt(second.alight), [ctx.to.lat, ctx.to.lon]] })
+      }
+
+      return {
+        id: '',
+        liveKey: encodeLiveKey({ legs: [liveKeyFor(first), liveKeyFor(second)], tw }),
+        leaveAt: iso(leaveAt),
+        arriveAt: iso(finalArrive),
+        durationMinutes: Math.ceil((finalArrive - leaveAt) / 60),
+        fare: fareFor({
+          firstZone: zoneOf(first.board.zone),
+          lastZone: zoneOf(second.alight.zone),
+          legs: [first, second].map((c) => ({ agencyId: c.agencyId, routeShortName: c.routeShortName ?? '' })),
+        }),
+        alerts: alertsFor(ctx.live, [first, second]),
+        transfer: { stop: second.board.name, ...status, fallbackDepartAt },
+        snow: [],
+        legs,
+      }
+    }),
+  )
+}
+
+const epochOf = (s: string): number => DateTime.fromISO(s, { zone: ZONE }).toSeconds()
+
+const routeSequence = (o: Option): string =>
+  o.legs.flatMap((l) => (l.mode === 'walk' ? [] : [l.route])).join('+')
+
+/** One ranked list: best per route sequence, at most 5, re-numbered opt-1..opt-5. */
+export function mergeAndRank(direct: Option[], transfer: Option[]): Option[] {
+  const ranked = [...direct, ...transfer]
+    .map((o) => ({ o, key: rankKey(epochOf(o.arriveAt), o.transfer), leave: epochOf(o.leaveAt) }))
+    .sort((a, b) => a.key - b.key || b.leave - a.leave || a.o.id.localeCompare(b.o.id))
+  const seen = new Set<string>()
+  const out: Option[] = []
+  for (const { o } of ranked) {
+    const seq = routeSequence(o)
+    if (seen.has(seq)) continue
+    seen.add(seq)
+    out.push(o)
+    if (out.length === 5) break
+  }
+  return out.map((o, i) => ({ ...o, id: `opt-${i + 1}` }))
 }

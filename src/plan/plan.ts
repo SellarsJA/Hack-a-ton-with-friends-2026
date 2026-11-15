@@ -3,8 +3,10 @@ import type { LatLng, PlanResponse } from '@/src/contract/schema'
 import { getDb, type Db } from '@/src/db/client'
 import { getLiveIndex } from '@/src/live/cache'
 import type { LiveIndex } from '@/src/live/decode'
-import { assembleDirectOptions } from '@/src/plan/assemble'
+import { assembleDirectOptions, assembleTransferOptions, mergeAndRank } from '@/src/plan/assemble'
+import { nextDepartures } from '@/src/plan/departures'
 import { findDirectCandidates, findNearbyStops } from '@/src/plan/query'
+import { findTransferCandidates } from '@/src/plan/queryTransfer'
 import { activeServiceDays, nowInEdmonton } from '@/src/time/edmonton'
 
 type Shapes = Map<string, [number, number][]>
@@ -13,6 +15,8 @@ export type PlanDeps = {
   db: Db
   findNearbyStops: typeof findNearbyStops
   findDirectCandidates: typeof findDirectCandidates
+  findTransferCandidates: typeof findTransferCandidates
+  nextDepartures: typeof nextDepartures
   loadShapes: (db: Db, ids: string[]) => Promise<Shapes>
   getLiveIndex: () => Promise<LiveIndex | null>
   now: () => DateTime
@@ -38,6 +42,8 @@ export function defaultDeps(): PlanDeps {
     db: getDb(),
     findNearbyStops,
     findDirectCandidates,
+    findTransferCandidates,
+    nextDepartures,
     loadShapes,
     getLiveIndex: () => getLiveIndex(),
     now: nowInEdmonton,
@@ -67,10 +73,26 @@ export async function planTrip(
   if (origin.length === 0) return empty('no_stops_near_start')
   if (dest.length === 0) return empty('no_stops_near_end')
 
-  const cands = await deps.findDirectCandidates(deps.db, origin, dest, activeServiceDays(now))
-  const shapeIds = [...new Set(cands.map((c) => c.shapeId).filter((s): s is string => s != null))]
+  const days = activeServiceDays(now)
+  const [direct, transfers] = await Promise.all([
+    deps.findDirectCandidates(deps.db, origin, dest, days),
+    deps.findTransferCandidates(deps.db, origin, dest, days),
+  ])
+  const shapeIds = [
+    ...new Set(
+      [...direct, ...transfers.flatMap((t) => [t.first, t.second])]
+        .map((c) => c.shapeId)
+        .filter((s): s is string => s != null),
+    ),
+  ]
   const shapes = await deps.loadShapes(deps.db, shapeIds)
-  const options = assembleDirectOptions(cands, { from, to, live, nowEpoch, shapes })
+  const ctx = { from, to, live, nowEpoch, shapes }
+  const directOptions = assembleDirectOptions(direct, ctx)
+  const transferOptions = await assembleTransferOptions(transfers, {
+    ...ctx,
+    nextDepartures: (args) => deps.nextDepartures(deps.db, args),
+  })
+  const options = mergeAndRank(directOptions, transferOptions)
   if (options.length === 0) return empty('no_trips_soon')
   return { generatedAt, liveDataAgeSeconds, emptyReason: null, options, vehicles: [] }
 }
