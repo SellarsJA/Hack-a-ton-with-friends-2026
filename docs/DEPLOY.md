@@ -6,7 +6,7 @@ Environment variables: `DATABASE_URL`, `NEXT_PUBLIC_TOMTOM_KEY`, `LIVE_SOURCE` (
 
 **The scripts (`db:schema`, `import-gtfs`) do not load `.env.local`.** Pass the variable on the command line as shown below, or run the script with Node's env-file flag, e.g. `npx tsx --env-file=.env.local scripts/import-gtfs/index.ts`.
 
-Each command is shown for bash and for PowerShell (the team uses Windows).
+Each command is shown for bash and for PowerShell (the team uses Windows). In the bash examples, paste the full Neon connection string inside the single quotes, because it contains `&` characters that bash would otherwise split on.
 
 ## 0. Pre-demo tasks
 
@@ -19,10 +19,10 @@ Each command is shown for bash and for PowerShell (the team uses Windows).
 2. Add Neon through the Vercel marketplace; this sets `DATABASE_URL`.
 3. Set `NEXT_PUBLIC_TOMTOM_KEY` and `LIVE_SOURCE=city`.
 4. Apply the schema before the first import. It is safe to rerun (`create … if not exists`).
-   - bash: `DATABASE_URL=<prod> npm run db:schema`
+   - bash: `DATABASE_URL='<prod>' npm run db:schema`
    - PowerShell: `$env:DATABASE_URL="<prod>"; npm run db:schema`
 5. Load the schedule:
-   - bash: `DATABASE_URL=<prod> npm run import-gtfs`
+   - bash: `DATABASE_URL='<prod>' npm run import-gtfs`
    - PowerShell: `$env:DATABASE_URL="<prod>"; npm run import-gtfs`
    - The import truncates and reloads the schedule tables in one transaction, which locks them for the duration (~1.25M `stop_times` rows). Run it at a quiet time.
 6. Verify the import (Neon SQL editor or `psql`):
@@ -48,10 +48,10 @@ Each command is shown for bash and for PowerShell (the team uses Windows).
 **Tier 2 production update.** Run these once against the existing production database. The schema step is safe to rerun.
 
 1. Apply the schema. This creates `stop_links` and the `stop_times (stop_id, arr)` index:
-   - bash: `DATABASE_URL=<prod> npm run db:schema`
+   - bash: `DATABASE_URL='<prod>' npm run db:schema`
    - PowerShell: `$env:DATABASE_URL="<prod>"; npm run db:schema`
 2. Reload the schedule. The import now also fills `stop_links`:
-   - bash: `DATABASE_URL=<prod> npm run import-gtfs`
+   - bash: `DATABASE_URL='<prod>' npm run import-gtfs`
    - PowerShell: `$env:DATABASE_URL="<prod>"; npm run import-gtfs`
 3. Check `stop_links` with the query in section 1, step 6.
 
@@ -91,9 +91,11 @@ Tick each item on a phone, on mobile data, against the deployed site.
 - [ ] **3. Lock and unlock.** Lock the phone for 1 minute, then unlock it. The page refreshes straight away.
 - [ ] **4. Check a route.** Open Routes, tap `9`, then tap a stop. Departures and vehicle dots appear.
 - [ ] **5. Snapshot mode.** If the site runs with `LIVE_SOURCE=snapshot`, everything still renders.
-- [ ] **6. Tab bar.** Tap the Routes tab. The bottom tab bar never covers the last trip option, the map's TomTom copyright, or the footer text.
-- [ ] **7. Transfer card.** On a transfer option, tap the card. The badge shows On track, Tight or At risk, and an LRT transfer shows "Train side uses the schedule".
-- [ ] **8. Bus popup.** Tap a bus dot on the map. A popup shows the bus number and crowding when it's known.
+- [ ] **6. Tab bar, trip results.** On the trip results, scroll to the last option. The bottom tab bar doesn't cover it.
+- [ ] **7. Tab bar, map.** On the results map, the TomTom copyright at the bottom is fully visible above the tab bar.
+- [ ] **8. Tab bar, footer.** Scroll to the very bottom of any page. The footer's licence text is visible above the tab bar.
+- [ ] **9. Transfer card.** On a transfer option, tap the card. The badge shows On track, Tight or At risk, and an LRT transfer shows "Train side uses the schedule".
+- [ ] **10. Bus popup.** Tap a bus dot on the map. A popup shows the bus number and crowding when it's known.
 
 ## Notes
 
