@@ -102,7 +102,7 @@ Task 11 comes last.
 
 - [ ] **Step 1: Write the failing tests.** All four fixtures parse against their schemas. A `Transfer` with `status: 'late'` throws.
 - [ ] **Step 2: Run `npm test`.** Expected: FAIL.
-- [ ] **Step 3: Implement the schemas and fixtures.** Tier 1 code still compiles; set the new fields to `null`, `[]` or a placeholder `liveKey` until Task 6.
+- [ ] **Step 3: Implement the schemas and fixtures.** Tier 1 code still compiles; set the new fields to `null`, `[]` or a placeholder `liveKey` until Task 6. Tier 1 tests that count the fixture's options (e.g. "renders 3 cards") now expect 4. Update only those counts, and list each one in the report.
 - [ ] **Step 4: Run `npm test`.** Expected: PASS, including all tier 1 tests.
 - [ ] **Step 5: Commit:** `git commit -am "feat: contract v2 for transfers, live refresh, routes"`.
 
@@ -128,7 +128,7 @@ Task 11 comes last.
   - 5,000 random stops in Edmonton's bounding box finish in under 2 s.
 - [ ] **Step 3: Run.** Expected: FAIL.
 - [ ] **Step 4: Implement.**
-- [ ] **Step 5: Run.** Expected: PASS. Then re-run the real import on the dev branch. `select count(*) from stop_links` is between 6,000 and 200,000.
+- [ ] **Step 5: Run.** Expected: PASS, including every tier 1 test. If a new gtfs-mini stop legitimately changes a tier 1 test's expected nearby-stop list, update only that expectation and say so in the report. Then run `stopLinks` on the real feed's stops: transform the real `gtfs.zip` in a throwaway script outside the repo, and record the link count and elapsed time. Expected: between 6,000 and 200,000 links. (Agents have no Neon credentials, so the production import is a DEPLOY.md step.)
 - [ ] **Step 6: Commit:** `git commit -am "feat: walkable stop links for transfers"`.
 
 ### Task 3: Transfer status and ranking
@@ -160,10 +160,12 @@ Task 11 comes last.
 **Files:**
 - Create: `src/plan/queryTransfer.ts`
 - Modify: `tests/fixtures/gtfs-mini/*`. Add a second route crossing trip A's route at a shared stop, and an LRT route with `route_type 0` meeting it via a linked stop.
-- Test: `tests/plan/queryTransfer.test.ts`, an integration test gated on `DATABASE_URL_TEST` like tier 1's Task 7.
+- Test: `tests/plan/queryTransfer.test.ts`, an integration test that always runs on `makeTestDb()` from `tests/helpers/pgliteDb.ts`, like tier 1's Task 7.
 
 **Interfaces:**
-- Consumes: `sql`, `NearbyStop` (tier 1, Task 7).
+- Consumes: `Db` (`src/db/client.ts`; every query function takes `db: Db` first), `NearbyStop`, `Candidate` (tier 1, `src/plan/query.ts`).
+- Signature: `findTransferCandidates(db: Db, origin, dest, days)`.
+- **Late buses (tier 1 ruling R21):** in `leg1`, use the lower bound `days.now_s + o.walk_s - 1800` instead of `days.now_s + o.walk_s`, so a first bus running up to 30 minutes late can still be caught. Assembly (Task 6) then keeps only options where the rider can walk to the first stop in time.
 - Produces:
   - `TransferCandidate = { first: Candidate; second: Candidate; transferWalkSeconds: number }`. Here `first.alight` is the transfer stop on trip 1 and `second.board` is the transfer stop on trip 2. Both reuse tier 1's `Candidate` shape, with `distanceM`/`walkSeconds` 0 on the transfer-side stops.
   - `findTransferCandidates(origin: NearbyStop[], dest: NearbyStop[], days: { serviceDate: string; nowSeconds: number }[]): Promise<TransferCandidate[]>`
@@ -209,7 +211,7 @@ Join the result back to route, trip and stop details in a second query, keyed by
   - A second leg leaving 30 s after the first arrives is excluded, because of the 60 s buffer.
 - [ ] **Step 2: Run.** Expected: FAIL.
 - [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run.** Expected: PASS. Then on the real dev data, time the query for Churchill Square → Mill Woods Town Centre (53.4570, -113.4280). It must take under 1.5 s; record the timing in the PR. If it's slower, add `create index stop_times_trip_seq_stop on stop_times (trip_id, stop_sequence, stop_id)` and re-time.
+- [ ] **Step 4: Run.** Expected: PASS. Then time the query on the real feed: in a throwaway script outside the repo, load the real `gtfs.zip` into PGlite (transformFeed with yesterday + 8 days, then `db/schema.sql`, batched inserts, `analyze`, as tier 1's Task 7 did). Time `findNearbyStops` + `findTransferCandidates` for Churchill Square (53.5444, -113.4909) → Mill Woods Town Centre (53.4570, -113.4280) at 08:00 Edmonton on a weekday in the window. It must take under 1.5 s; record the timing, candidate count and an `EXPLAIN ANALYZE` summary in the report. If it's slower, add `create index if not exists stop_times_trip_seq_stop on stop_times (trip_id, stop_sequence, stop_id)` to `db/schema.sql` and re-time. Restructure the query only if that still doesn't reach 1.5 s.
 - [ ] **Step 5: Commit:** `git commit -am "feat: one-transfer candidate query"`.
 
 ### Task 5: Next departures at a stop
@@ -219,7 +221,8 @@ Join the result back to route, trip and stop details in a second query, keyed by
 - Test: `tests/plan/departures.test.ts`, an integration test on `gtfs-mini`.
 
 **Interfaces:**
-- Consumes: `sql`, `activeServiceDays`, `toInstant` (tier 1); `applyRealtime` (tier 1, Task 8), whose parameter type widens to `RealtimeLegInput = { tripId; serviceDate; board: { stopId; seq; dep }; alight: { stopId; seq; arr } }`. `Candidate` already satisfies it. For a departure, pass the same stop as both board and alight.
+- Consumes: `Db`, `activeServiceDays`, `toInstant` (tier 1); `applyRealtime(c: RealtimeLegInput, live)` from `src/plan/realtime.ts`, where `RealtimeLegInput` is already exported. For a departure, pass the same stop as both board and alight.
+- Signature: `nextDepartures(db: Db, args)`. The test is an integration test on `makeTestDb()`.
 - Produces:
   - `Departure = { tripId; serviceDate; routeId; headsign; departEpoch: number; realtime: boolean }`
   - `nextDepartures(args: { stopId: string; routeId?: string; afterEpoch: number; limit: number; live: LiveIndex|null }): Promise<Departure[]>`. It covers the active service days, within 3 hours after `afterEpoch`, with live times applied, sorted by departure.
@@ -251,7 +254,8 @@ Join the result back to route, trip and stop details in a second query, keyed by
     - `fallbackDepartAt` is set only when `at_risk`: `nextDepartures({ stopId: second.board.stopId, routeId: second.routeId, afterEpoch: arrive1 + tw, limit: 1 })`.
     - The fare comes from the first board zone to the last alight zone, across both legs.
   - `mergeAndRank(direct: Option[], transfer: Option[]): Option[]`. Sort by `rankKey`, keep the best per route-number sequence (e.g. `9`, `9+Valley`), take the first 5, and re-id them `opt-1` to `opt-5`.
-  - `planTrip` runs `findDirectCandidates` and `findTransferCandidates` in parallel, and sets `liveKey` on every option.
+  - `planTrip` runs `findDirectCandidates` and `findTransferCandidates` in parallel, and sets `liveKey` on every option. `PlanDeps` gains `findTransferCandidates` and `nextDepartures`, so tests can stub them.
+  - **Catchability (tier 1 ruling R21):** keep a transfer option only when `first.departEpoch − first.board.walkSeconds >= nowEpoch`, using the live time when available. That's the same rule `assembleDirectOptions` applies. The connection itself is judged by `transferStatus`, not filtered out.
 
 - [ ] **Step 1: Write the failing tests.**
   - `decodeLiveKey(encodeLiveKey(p))` deep-equals `p`.
@@ -269,7 +273,7 @@ Join the result back to route, trip and stop details in a second query, keyed by
 
 **Files:**
 - Create: `src/plan/vehicles.ts`, `app/api/live/route.ts`, `src/plan/live.ts`
-- Modify: `src/live/decode.ts` (vehicles carry `routeId` from `vehicle.trip.route_id` when present), `src/plan/plan.ts`
+- Modify: `src/live/decode.ts` (vehicles carry `routeId` from `vehicle.trip.route_id` when present; a vehicle whose `position` is absent gets `vehicle: null` instead of a 0,0 position, which was deferred from tier 1 Task 6), `src/plan/plan.ts`
 - Test: `tests/plan/vehicles.test.ts`, `tests/api/live.test.ts`
 
 **Interfaces:**
@@ -337,7 +341,7 @@ Join the result back to route, trip and stop details in a second query, keyed by
 - Test: `tests/routes/queries.test.ts` (integration, `gtfs-mini`), `tests/api/routes.test.ts`
 
 **Interfaces:**
-- Consumes: `sql`, `nextDepartures`, `vehiclesForRoutes`, `getLiveIndex`, `activeServiceDays`.
+- Consumes: `Db`/`getDb`, `nextDepartures`, `vehiclesForRoutes`, `getLiveIndex`, `activeServiceDays`. `listRoutes(db)` and `routeDetail(db, routeId, stopId, nowEpoch)` take `db: Db` first. Integration tests run on `makeTestDb()`.
 - Produces:
   - `listRoutes(): Promise<RouteSummary[]>`, grouped and sorted per Global Constraints.
   - `routeDetail(routeId: string, stopId: string | null, nowEpoch: number): Promise<RouteDetail | null>`.
@@ -367,7 +371,8 @@ Join the result back to route, trip and stop details in a second query, keyed by
 **Interfaces:**
 - Consumes: `RoutesResponse`, `RouteDetail`, and their fixtures (Task 1).
 - Produces:
-  - `useMaplibre(container: RefObject<HTMLDivElement>): maplibregl.Map | null`. It contains the TomTom tiles, attribution and teardown from `TripMap`, unchanged.
+  - `useMaplibre(container: RefObject<HTMLDivElement>): maplibregl.Map | null`. It contains the TomTom tiles, attribution (`attributionOptions`, never compact), the maplibre worker setup added on `main` (`public/maplibre-gl-worker.js`), the load handling and teardown from the current `TripMap`, all behaviour unchanged. Every existing `TripMap` test must still pass.
+  - The fixed `TabBar` must not cover page content or the footer's attribution text: add matching bottom padding to the page body.
   - `<RouteMap detail={RouteDetail} selectedStopId onSelectStop />`. It draws each pattern's line in the route `color`, falling back to `#2563EB`, with stops as circles and vehicles as dots.
   - `<TabBar />` with two tabs, `Plan` (`/`) and `Routes` (`/routes`), fixed to the bottom with 48 px targets.
 - **`/routes`:**
@@ -396,12 +401,15 @@ Join the result back to route, trip and stop details in a second query, keyed by
 
 **Files:** none new.
 
-- [ ] **Step 1: Re-run the import against production:** `DATABASE_URL=<prod> npm run import-gtfs`. It now builds `stop_links`.
-- [ ] **Step 2: Deploy.** Run `npm test`, push, and confirm the Vercel deploy succeeds.
-- [ ] **Step 3: Walk through on a real phone.**
+- [ ] **Step 1: Update `docs/DEPLOY.md`** (agents have no credentials; the team runs it). Add these steps, each with its bash and PowerShell form:
+  - Re-run `npm run db:schema` and then `npm run import-gtfs` against production; the import now builds `stop_links`.
+  - Check `select count(*) from stop_links` (expect 6,000–200,000).
+  - Add the tier 2 phone walkthrough below as a new section.
+- [ ] **Step 2: Build check.** `npm test`, `npx tsc --noEmit`, `npm run lint` (0 errors) and `npm run build` all pass.
+- [ ] **Step 3: Write the tier 2 phone walkthrough** into `docs/DEPLOY.md` as a checklist the team ticks off:
   1. Plan Churchill Square → a Valley Line destination (e.g. Mill Woods Town Centre). A transfer option appears with a badge and the train note.
   2. Leave the page open for 1 minute. The badge updates without a reload.
   3. Lock the phone for 1 minute, then unlock it. A refresh happens at once.
   4. Open Routes → `9` → tap a stop. Departures and vehicle dots appear.
   5. With `LIVE_SOURCE=snapshot`, everything still renders.
-- [ ] **Step 4: Record results** in the PR description, then commit any fixes with their own tests.
+- [ ] **Step 4: Commit:** `git add -A && git commit -m "docs: tier 2 deploy steps and phone walkthrough"`.
