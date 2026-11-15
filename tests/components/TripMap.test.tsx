@@ -8,7 +8,12 @@ const fitBounds = vi.fn()
 vi.mock('maplibre-gl', () => {
   class Map {
     fitBounds = fitBounds
-    on() {}
+    resize() {}
+    on(type: string, cb: () => void) {
+      if (type === 'load') cb()
+    }
+    addSource() {}
+    addLayer() {}
     addControl() {}
     removeControl() {}
     remove() {}
@@ -55,7 +60,7 @@ describe('TripMap', () => {
     vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})))
     const plan = PlanResponse.parse(fixture)
     render(<TripMap options={plan.options} selectedId={plan.options[0].id} showWalking onSelect={() => {}} />)
-    expect(fitBounds).toHaveBeenCalledTimes(1)
-    expect(fitBounds.mock.calls[0][1]).toMatchObject({ maxZoom: 16, padding: 40, animate: false })
+    expect(fitBounds).toHaveBeenCalled()
+    expect(fitBounds.mock.calls.at(-1)?.[1]).toMatchObject({ maxZoom: 16, padding: 40, animate: false })
   })
 })

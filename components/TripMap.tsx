@@ -16,6 +16,22 @@ type Props = {
 
 const SOURCE = 'lines'
 const FALLBACK_ATTRIBUTION = '© TomTom'
+const FIT = { padding: 40, animate: false, maxZoom: 16 } as const
+
+function fitRoute(map: maplibregl.Map, options: Option[]) {
+  if (options.length === 0) return
+  const [[west, south], [east, north]] = boundsFor(options)
+  if (!Number.isFinite(west) || west === Infinity) return
+  // The panel's percentage height can still be settling when the style loads.
+  map.resize()
+  map.fitBounds(
+    [
+      [west, south],
+      [east, north],
+    ],
+    FIT,
+  )
+}
 
 function styleFor(key: string): maplibregl.StyleSpecification {
   return {
@@ -99,6 +115,9 @@ export default function TripMap({ options, selectedId, showWalking, onSelect }: 
         map.on('mouseleave', id, () => (map.getCanvas().style.cursor = ''))
       }
       loadedRef.current = true
+      // Style load resets the camera to the constructor center and zoom.
+      // Fit after that, or the route stays a short stroke on a city-wide map.
+      fitRoute(map, latest.current.options)
     })
 
     return () => {
@@ -111,19 +130,11 @@ export default function TripMap({ options, selectedId, showWalking, onSelect }: 
     }
   }, [key])
 
-  // Fit bounds when options change.
+  // Fit again when a later search replaces the options. Before 'load', this is a no-op.
   useEffect(() => {
     const map = mapRef.current
-    if (!map || options.length === 0) return
-    const [[a, b], [c, d]] = boundsFor(options)
-    if (!Number.isFinite(a)) return
-    map.fitBounds(
-      [
-        [a, b],
-        [c, d],
-      ],
-      { padding: 40, animate: false, maxZoom: 16 },
-    )
+    if (!map || !loadedRef.current) return
+    fitRoute(map, options)
   }, [options, key])
 
   // Line data follows options/selection/walking.
