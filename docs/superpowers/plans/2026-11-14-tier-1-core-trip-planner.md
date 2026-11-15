@@ -107,7 +107,10 @@ tests/fixtures/gtfs-mini/      # tiny hand-written GTFS (Task 5)
   - `activeServiceDays(now: DateTime): { serviceDate: string; nowSeconds: number }[]`, which returns today, then yesterday with `nowSeconds + 86400`
   - `formatClock(dt: DateTime): string`, e.g. `"6:07 PM"`
 
-- [ ] **Step 1: Scaffold.** Run `npx create-next-app@latest . --ts --app --eslint --tailwind --src-dir=false --import-alias "@/*" --use-npm`, then `npm i luxon zod && npm i -D vitest @vitejs/plugin-react jsdom @testing-library/react @testing-library/user-event @types/luxon`.
+- [ ] **Step 1: Scaffold.** The repo root isn't empty, so scaffold into a temp folder and move the files up.
+  1. Run `npx create-next-app@latest .scaffold --ts --app --eslint --tailwind --no-src-dir --import-alias "@/*" --use-npm --yes --disable-git`.
+  2. Move `.scaffold`'s contents to the repo root and delete `.scaffold`. Keep the existing `README.md`, adding a short "Run locally" section to it.
+  3. Run `npm i luxon zod && npm i -D vitest @vitejs/plugin-react jsdom @testing-library/react @testing-library/user-event @types/luxon`.
   - Add `"test": "vitest run"` to `package.json`.
   - Configure `vitest.config.ts` with the `@/` alias and the `jsdom` environment for `*.test.tsx`.
   - Add `.env.example` with the three env vars from Global Constraints.
@@ -264,7 +267,7 @@ create table feed_meta (feed_version text, window_start date, window_end date, i
 - [ ] **Step 3: Run.** Expected: FAIL.
 - [ ] **Step 4: Implement `transform.ts`** with `csv-parse` (`columns: true`, `bom: true`, `trim: true`) and `index.ts` with `unzipper` and `postgres`, using `sql\`copy ... from stdin\`.writable()`. Add the `import-gtfs` script to `package.json`, run via `tsx`.
 - [ ] **Step 5: Run.** Expected: PASS.
-- [ ] **Step 6: Run the real import** against a Neon dev branch: `DATABASE_URL=... npm run import-gtfs`. Expected: no error. `select count(*) from stop_times` is between 300,000 and 2,900,000. Record the database size from the Neon console in the PR description; it must be under 700 MB.
+- [ ] **Step 6: Run the transform on the real feed.** Agents have no Neon credentials, so the real database load is a user step in `docs/DEPLOY.md` (Task 13). Download `gtfs.zip`, run `transformFeed` on it with today's date and `days: 7`, and record each table's row count in the report. Expected: `stopTimes` between 300,000 and 2,900,000 rows. Also add `tests/helpers/pgliteDb.ts`, which exports `makeTestDb(): Promise<Db>`. It boots `@electric-sql/pglite` in-process (`npm i -D @electric-sql/pglite`), runs `db/schema.sql`, and loads `tests/fixtures/gtfs-mini` through `transformFeed` with parameterized inserts. Add a test that `makeTestDb()` loads the right row counts. (`Db` is defined in Task 7's `src/db/client.ts`; create that file's `Db` interface here.)
 - [ ] **Step 7: Commit:** `git commit -am "feat: rerunnable GTFS import into Neon"`.
 
 ### Task 6: Live feed decoding and cache
@@ -275,7 +278,7 @@ create table feed_meta (feed_version text, window_start date, window_end date, i
 
 **Interfaces:**
 - Produces:
-  - `Occupancy = 'not_crowded'|'some_standing'|'full'`
+  - `Occupancy = 'not_crowded'|'some_standing'|'full'`, imported from `src/contract/schema.ts` (Task 2), not redefined
   - `StopLive = { stopSequence: number; stopId: string; arrival: number|null; departure: number|null; delay: number|null }`. Times are epoch seconds.
   - `TripLive = { stops: StopLive[] /* sorted by stopSequence */; vehicle: { label: string; lat: number; lon: number; occupancy: Occupancy|null } | null }`
   - `AlertLive = { headline: string; routeIds: string[]; stopIds: string[]; tripIds: string[] }`
@@ -316,16 +319,16 @@ create table feed_meta (feed_version text, window_start date, window_end date, i
 
 **Files:**
 - Create: `src/db/client.ts`, `src/plan/query.ts`
-- Test: `tests/plan/query.test.ts`. This is an integration test, skipped unless `DATABASE_URL_TEST` is set; that database is loaded from `gtfs-mini`.
+- Test: `tests/plan/query.test.ts`. This is an integration test that always runs, using `makeTestDb()` from `tests/helpers/pgliteDb.ts` (Task 5), which is loaded from `gtfs-mini`.
 
 **Interfaces:**
-- Consumes: `boundingBox`, `distanceMeters`, `walkMinutes` (Task 4); `activeServiceDays` (Task 1).
+- Consumes: `boundingBox`, `distanceMeters`, `walkMinutes` (Task 4); `activeServiceDays` (Task 1); `Db`, `makeTestDb` (Task 5).
 - Produces:
-  - `sql` (a neon tagged template) from `src/db/client.ts`
+  - `src/db/client.ts`: `interface Db { query<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<T[]> }` and `getDb(): Db`, a lazily created singleton over `neon(process.env.DATABASE_URL).query(text, params)` from `@neondatabase/serverless`. Every query function below takes `db: Db` as its first parameter.
   - `NearbyStop = { stopId: string; name: string; lat: number; lon: number; zone: string|null; distanceM: number; walkSeconds: number }`
-  - `findNearbyStops(p: LatLng, radiusM = 800): Promise<NearbyStop[]>`. Bounding box in SQL, haversine filter in TS, nearest 30.
+  - `findNearbyStops(db: Db, p: LatLng, radiusM = 800): Promise<NearbyStop[]>`. Bounding box in SQL, haversine filter in TS, nearest 30.
   - `Candidate = { tripId; serviceDate; routeId; agencyId; routeShortName; routeType; headsign; shapeId; board: NearbyStop & { seq: number; dep: number }; alight: NearbyStop & { seq: number; arr: number } }`
-  - `findDirectCandidates(origin: NearbyStop[], dest: NearbyStop[], days: { serviceDate: string; nowSeconds: number }[]): Promise<Candidate[]>`
+  - `findDirectCandidates(db: Db, origin: NearbyStop[], dest: NearbyStop[], days: { serviceDate: string; nowSeconds: number }[]): Promise<Candidate[]>`
 
 The query: for each trip, pick the board/alight pair with the least door-to-door time, where the rider can walk to the board stop before it leaves.
 
@@ -353,7 +356,7 @@ limit 300;
   - At `2026-11-14 18:00`, a search between two stops on trip A returns 1 candidate with the right board and alight sequence numbers.
   - At `2026-11-15 00:30`, the trip with the `25:10:00` stop is returned with `serviceDate '2026-11-14'`. *(Review Focus 1)*
   - A destination with no stops in range → `findNearbyStops` returns `[]`.
-- [ ] **Step 2: Run** with `DATABASE_URL_TEST` set. Expected: FAIL.
+- [ ] **Step 2: Run `npm test`.** Expected: FAIL.
 - [ ] **Step 3: Implement.** Join each candidate's stop rows back to the `NearbyStop` objects in TS.
 - [ ] **Step 4: Run.** Expected: PASS.
 - [ ] **Step 5: Commit:** `git commit -am "feat: direct-trip candidate query"`.
@@ -384,7 +387,7 @@ limit 300;
   6. Each option's legs are walk (straight line from → board stop), transit (sliced shape), walk (alight stop → to).
   7. Alerts are those whose `routeIds` include the route, or whose `stopIds` include either stop.
   8. `mode` is `'rail'` when `routeType` is 0 or 1, otherwise `'bus'`.
-  9. Fares use the board and alight zones.
+  9. Fares use the board and alight zones. A `null` or unrecognised zone counts as `'1EDM'`.
 
 - [ ] **Step 1: Write the failing realtime tests.**
   - An exact stop prediction is used.
@@ -412,7 +415,8 @@ limit 300;
 **Interfaces:**
 - Consumes: Tasks 1–8.
 - Produces:
-  - `planTrip(from: LatLng, to: LatLng, deps = defaultDeps): Promise<PlanResponse>`. `deps` holds `findNearbyStops`, `findDirectCandidates`, `loadShapes(ids: string[])`, `getLiveIndex` and `now`, so tests can swap them.
+  - `planTrip(from: LatLng, to: LatLng, deps = defaultDeps): Promise<PlanResponse>`. `deps` holds `db: Db`, `findNearbyStops`, `findDirectCandidates`, `loadShapes(db, ids: string[])`, `getLiveIndex` and `now`, so tests can swap them. `defaultDeps.db` is `getDb()`.
+  - `searchIndex(db: Db, q: string): Promise<SearchResponse>` in `src/plan/search.ts`, used by `/api/search`.
   - `GET /api/plan?from=lat,lng&to=lat,lng`:
     - returns 400 `{ error: 'bad_coordinates' }` when `parseLatLng` fails;
     - returns `fixtures/plan.json` when `fixture=1`;
@@ -432,7 +436,7 @@ limit 300;
 - [ ] **Step 2: Run.** Expected: FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run.** Expected: PASS.
-- [ ] **Step 5: Smoke test.** Run `npm run dev`. `curl "localhost:3000/api/plan?from=53.5444,-113.4909&to=53.4855,-113.5137"` returns 1–5 options.
+- [ ] **Step 5: Smoke test end to end.** Add a test that calls `planTrip` with the real query functions and `db` from `makeTestDb()` (the `gtfs-mini` data), the snapshot-mode `getLiveIndex`, and a fixed `now` when trip A runs. It returns at least one option that passes `PlanResponse.parse`, and `searchIndex` finds a `gtfs-mini` stop by part of its name.
 - [ ] **Step 6: Commit:** `git commit -am "feat: plan and search API routes"`.
 
 ### Task 10: Search screen
@@ -535,7 +539,7 @@ limit 300;
 - [ ] **Step 2: Run.** Expected: FAIL.
 - [ ] **Step 3: Implement.** `npm i maplibre-gl`, then build `TripMap` with one GeoJSON source and line layers using data-driven `line-color`, `line-width` and `line-dasharray`.
 - [ ] **Step 4: Run.** Expected: PASS.
-- [ ] **Step 5: Check by hand.** With `NEXT_PUBLIC_USE_FIXTURE=1 npm run dev`, open `/results?...` at 360 px width in browser devtools. Three coloured lines, the TomTom copyright visible, and tapping a line selects its card.
+- [ ] **Step 5: Build check.** `npm run build` succeeds with no type errors. The visual check (three coloured lines, TomTom copyright visible, tapping a line selects its card) is in Task 13's `docs/DEPLOY.md` walkthrough for a human on a phone.
 - [ ] **Step 6: Commit:** `git commit -am "feat: TomTom results map with option lines"`.
 
 ### Task 13: Footer, deploy, phone walkthrough
@@ -553,18 +557,12 @@ limit 300;
 - [ ] **Step 2: Run.** Expected: FAIL.
 - [ ] **Step 3: Implement `Footer`** and add it to `layout.tsx`.
 - [ ] **Step 4: Run `npm test`.** Expected: the whole suite passes.
-- [ ] **Step 5: Deploy.**
-  1. Create the Vercel project from the repo.
-  2. Add Neon through the Vercel marketplace.
-  3. Set `NEXT_PUBLIC_TOMTOM_KEY`, and set `LIVE_SOURCE=city`.
-  4. Run `DATABASE_URL=<prod> npm run import-gtfs`.
-  5. In the TomTom dashboard, restrict the key to the Vercel domain and `localhost`.
-- [ ] **Step 6: Walk through on a real phone** on mobile data:
-  1. Allow location, pick a destination, see 1–5 options with Live or Scheduled badges, and see lines on the map.
-  2. Deny location and type a start instead.
-  3. Set `LIVE_SOURCE=snapshot`, redeploy, and confirm the app still works.
+- [ ] **Step 5: Write `docs/DEPLOY.md`** for the team to run by hand, since deploying needs the team's own accounts. It's a numbered checklist:
+  1. **Deploy:** create the Vercel project from the repo; add Neon through the Vercel marketplace; set `NEXT_PUBLIC_TOMTOM_KEY` and `LIVE_SOURCE=city`; run `DATABASE_URL=<prod> npm run import-gtfs` and check `select count(*) from stop_times` and the database size (under 700 MB); in the TomTom dashboard, restrict the key to the Vercel domain and `localhost`.
+  2. **Phone walkthrough on mobile data:** allow location, pick a destination, and see 1–5 options with Live or Scheduled badges; see three coloured lines and the TomTom copyright on the map; tapping a line selects its card; deny location and type a start instead; set `LIVE_SOURCE=snapshot`, redeploy, and confirm the app still works.
+  3. **Rerun the import** whenever ETS publishes a new `gtfs.zip`: the current one ends 2026-12-12.
 
-  Expected: all pass. Record any failures as issues.
+  Also run `npm run build` and confirm it succeeds.
 - [ ] **Step 7: Commit:** `git commit -am "feat: attribution footer; deploy"`.
 
 ---

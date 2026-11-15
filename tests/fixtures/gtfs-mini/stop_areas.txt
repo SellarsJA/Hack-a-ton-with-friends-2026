@@ -1,0 +1,5 @@
+area_id,stop_id
+1EDM,1001
+1EDM,1002
+1EDM,1003
+2STA,2001
