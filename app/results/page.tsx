@@ -1,11 +1,12 @@
 'use client'
 
-import { Suspense, useCallback, useEffect, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { PlanResponse } from '@/src/contract/schema'
 import { parseLatLng } from '@/src/geo/geo'
+import { mergeLive, useLiveOption } from '@/src/hooks/useLiveOption'
 import LiveBanner from '@/components/LiveBanner'
 import OptionList from '@/components/OptionList'
 
@@ -59,6 +60,18 @@ function Results() {
     }
   }, [valid, from, to, attempt])
 
+  const plan = state.kind === 'ok' ? state.plan : null
+  const selected = plan?.options.find((o) => o.id === selectedId) ?? null
+  const live = useLiveOption(selected?.liveKey ?? null)
+  const displayed = useMemo(
+    () =>
+      plan && selected && live.data
+        ? plan.options.map((o) => (o.id === selected.id ? mergeLive(o, live.data!) : o))
+        : (plan?.options ?? []),
+    [plan, selected, live.data],
+  )
+  const mapVehicles = live.data ? live.vehicles : (plan?.vehicles ?? [])
+
   if (!valid) {
     return (
       <div className="flex flex-col gap-3 p-4">
@@ -88,6 +101,7 @@ function Results() {
             selectedId={selectedId}
             showWalking={showWalking}
             onSelect={setSelectedId}
+            vehicles={mapVehicles}
             fromLabel={fromLabel}
             toLabel={toLabel}
           />
@@ -109,7 +123,7 @@ function Results() {
         )}
         {state.kind === 'ok' && (
           <>
-            <LiveBanner ageSeconds={state.plan.liveDataAgeSeconds} />
+            <LiveBanner ageSeconds={live.data ? live.ageSeconds : state.plan.liveDataAgeSeconds} />
             {state.plan.options.length === 0 ? (
               <p>{state.plan.emptyReason ? EMPTY_TEXT[state.plan.emptyReason] : 'No trips found.'}</p>
             ) : (
@@ -123,7 +137,13 @@ function Results() {
                   />
                   Show walking
                 </label>
-                <OptionList options={state.plan.options} selectedId={selectedId} onSelect={setSelectedId} />
+                <OptionList
+                  options={displayed}
+                  selectedId={selectedId}
+                  onSelect={setSelectedId}
+                  expired={live.data?.expired ?? false}
+                  onSearchAgain={retry}
+                />
               </>
             )}
           </>

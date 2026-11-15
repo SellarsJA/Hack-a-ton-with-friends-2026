@@ -1,4 +1,4 @@
-import type { Option } from '@/src/contract/schema'
+import type { Option, Vehicle } from '@/src/contract/schema'
 
 export const OPTION_COLORS = ['#2563EB', '#7C3AED', '#0891B2', '#DB2777', '#4B5563'] as const
 const WALK_COLOR = '#9CA3AF'
@@ -75,6 +75,27 @@ export function labelPoints(
     })
   }
   return out
+}
+
+export const OTHER_VEHICLE_COLOR = '#374151'
+
+/** Vehicle points. Vehicles on the option's trips take its colour; others are grey. [lon, lat]. */
+export function buildVehicleFeatures(
+  vehicles: Vehicle[],
+  optionTrips: Map<string, string>,
+): GeoJSON.FeatureCollection {
+  return {
+    type: 'FeatureCollection',
+    features: vehicles.map((v) => ({
+      type: 'Feature',
+      properties: {
+        label: v.label,
+        color: optionTrips.get(v.tripId) ?? OTHER_VEHICLE_COLOR,
+        occupancy: v.occupancy,
+      },
+      geometry: { type: 'Point', coordinates: [v.lon, v.lat] },
+    })),
+  }
 }
 
 export function boundsFor(options: Option[]): [[number, number], [number, number]] {

@@ -3,8 +3,16 @@
 import { useEffect, useRef } from 'react'
 import * as maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import type { Option } from '@/src/contract/schema'
-import { buildLineFeatures, endpointMarkers, labelPoints, boundsFor } from '@/src/map/lines'
+import type { Option, Vehicle } from '@/src/contract/schema'
+import {
+  buildLineFeatures,
+  buildVehicleFeatures,
+  endpointMarkers,
+  labelPoints,
+  boundsFor,
+  OPTION_COLORS,
+} from '@/src/map/lines'
+import { OCCUPANCY_TEXT } from '@/components/format'
 import { tomtomRasterUrl, tomtomCopyrightUrl, attributionOptions } from '@/src/tomtom/tiles'
 
 type Props = {
@@ -14,9 +22,28 @@ type Props = {
   onSelect: (optionId: string) => void
   fromLabel?: string
   toLabel?: string
+  vehicles?: Vehicle[]
 }
 
 const SOURCE = 'lines'
+const VEHICLE_SOURCE = 'vehicles'
+const VEHICLE_LAYER = 'vehicles-dots'
+const NO_VEHICLES: Vehicle[] = []
+
+/** The selected option's transit trips mapped to its colour, plus the labels of its rail vehicles. */
+function selectedTrips(options: Option[], selectedId: string | null) {
+  const trips = new Map<string, string>()
+  const railLabels = new Set<string>()
+  const i = options.findIndex((o) => o.id === selectedId)
+  if (i >= 0) {
+    for (const leg of options[i].legs) {
+      if (leg.mode === 'walk') continue
+      trips.set(leg.tripId, OPTION_COLORS[i % OPTION_COLORS.length])
+      if (leg.mode === 'rail' && leg.vehicleLabel) railLabels.add(leg.vehicleLabel)
+    }
+  }
+  return { trips, railLabels }
+}
 const RIDE_FILTER: maplibregl.FilterSpecification = ['==', ['get', 'kind'], 'ride']
 const FALLBACK_ATTRIBUTION = '© TomTom'
 const FIT = { padding: 40, animate: false, maxZoom: 16 } as const
@@ -68,6 +95,7 @@ export default function TripMap({
   onSelect,
   fromLabel = 'Start',
   toLabel = 'Destination',
+  vehicles = NO_VEHICLES,
 }: Props) {
   const key = process.env.NEXT_PUBLIC_TOMTOM_KEY
   const container = useRef<HTMLDivElement>(null)
@@ -76,11 +104,11 @@ export default function TripMap({
   const markersRef = useRef<maplibregl.Marker[]>([])
   const endsRef = useRef<maplibregl.Marker[]>([])
   const onSelectRef = useRef(onSelect)
-  const latest = useRef({ options, selectedId, showWalking })
+  const latest = useRef({ options, selectedId, showWalking, vehicles })
 
   useEffect(() => {
     onSelectRef.current = onSelect
-    latest.current = { options, selectedId, showWalking }
+    latest.current = { options, selectedId, showWalking, vehicles }
   })
 
   // Create the map once.
@@ -151,6 +179,38 @@ export default function TripMap({
         map.on('mouseenter', id, () => (map.getCanvas().style.cursor = 'pointer'))
         map.on('mouseleave', id, () => (map.getCanvas().style.cursor = ''))
       }
+      // Vehicle dots go last so they draw above the route lines.
+      const sel = selectedTrips(latest.current.options, latest.current.selectedId)
+      map.addSource(VEHICLE_SOURCE, {
+        type: 'geojson',
+        data: buildVehicleFeatures(latest.current.vehicles, sel.trips),
+      })
+      map.addLayer({
+        id: VEHICLE_LAYER,
+        type: 'circle',
+        source: VEHICLE_SOURCE,
+        paint: {
+          'circle-radius': 6,
+          'circle-color': ['to-color', ['get', 'color']],
+          'circle-stroke-color': '#FFFFFF',
+          'circle-stroke-width': 2,
+        },
+      })
+      map.on('click', VEHICLE_LAYER, (e: maplibregl.MapLayerMouseEvent) => {
+        const f = e.features?.[0]
+        if (!f || f.geometry.type !== 'Point') return
+        const label = String(f.properties?.label ?? '')
+        const occ = f.properties?.occupancy
+        const rail = selectedTrips(latest.current.options, latest.current.selectedId).railLabels.has(label)
+        const occText = typeof occ === 'string' && occ in OCCUPANCY_TEXT ? ` · ${OCCUPANCY_TEXT[occ as keyof typeof OCCUPANCY_TEXT]}` : ''
+        const [lon, lat] = f.geometry.coordinates
+        new maplibregl.Popup({ closeButton: false })
+          .setLngLat([lon, lat])
+          .setText(`${rail ? 'Train' : 'Bus'} ${label}${occText}`)
+          .addTo(map)
+      })
+      map.on('mouseenter', VEHICLE_LAYER, () => (map.getCanvas().style.cursor = 'pointer'))
+      map.on('mouseleave', VEHICLE_LAYER, () => (map.getCanvas().style.cursor = ''))
       loadedRef.current = true
       // Style load resets the camera to the constructor center and zoom.
       // Fit after that, or the route stays a short stroke on a city-wide map.
@@ -185,6 +245,14 @@ export default function TripMap({
     const src = map.getSource(SOURCE) as maplibregl.GeoJSONSource | undefined
     src?.setData(buildLineFeatures(options, selectedId, showWalking))
   }, [options, selectedId, showWalking, key])
+
+  // Vehicle dots follow the live poll and the selection (which sets their colour).
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !loadedRef.current) return
+    const src = map.getSource(VEHICLE_SOURCE) as maplibregl.GeoJSONSource | undefined
+    src?.setData(buildVehicleFeatures(vehicles, selectedTrips(options, selectedId).trips))
+  }, [vehicles, options, selectedId, key])
 
   // Label markers rebuilt when options change; selection only restyles them.
   useEffect(() => {

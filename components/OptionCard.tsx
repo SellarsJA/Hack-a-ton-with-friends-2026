@@ -1,11 +1,23 @@
 import type { Option } from '@/src/contract/schema'
 import { Badge, OCCUPANCY_TEXT, clock } from './format'
+import TransferBadge from './TransferBadge'
 
-export default function OptionCard({ option, selected }: { option: Option; selected: boolean }) {
+export const EXPIRED_TEXT = 'This option has left. Search again.'
+
+export default function OptionCard({
+  option,
+  selected,
+  expired = false,
+}: {
+  option: Option
+  selected: boolean
+  expired?: boolean
+}) {
   const { fare } = option
   const head = `Leave ${clock(option.leaveAt)} · ${option.durationMinutes} min · $${fare.amount.toFixed(2)}${
     fare.estimated ? ' (estimated)' : ''
   }`
+  const trainSide = option.legs.some((l) => l.mode === 'rail')
   return (
     <div
       className={`flex min-h-12 flex-col gap-1 rounded-lg border-2 px-3 py-2 text-left ${
@@ -25,9 +37,11 @@ export default function OptionCard({ option, selected }: { option: Option; selec
           </span>
         ),
       )}
+      {option.transfer && <TransferBadge transfer={option.transfer} trainSide={trainSide} />}
       {option.alerts.map((a, i) => (
         <span key={i} className="text-sm text-amber-800 dark:text-amber-300">{`⚠️ ${a.headline}`}</span>
       ))}
+      {expired && <span className="text-sm font-semibold text-red-800 dark:text-red-300">{EXPIRED_TEXT}</span>}
     </div>
   )
 }

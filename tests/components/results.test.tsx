@@ -184,7 +184,8 @@ describe('results page', () => {
     ).toBeTruthy()
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
     await waitFor(() => expect(screen.getAllByRole('button', { name: /Leave/ })).toHaveLength(4))
-    expect(f).toHaveBeenCalledTimes(2)
+    // The selected option's live poll also calls fetch; count plan requests only.
+    expect(f.mock.calls.filter((c) => String(c[0]).startsWith('/api/plan'))).toHaveLength(2)
   })
 
   it('treats non-2xx and invalid bodies as errors', async () => {
