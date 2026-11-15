@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { Db } from '@/src/db/client'
 import { FeedbackRequest, Issue, VehicleSummary } from '@/src/contract/schema'
-import { upsertFeedback, vehicleSummary } from '@/src/feedback/store'
+import { routeFeedbackSummaries, upsertFeedback, vehicleSummary } from '@/src/feedback/store'
 import { makeTestDb } from '../helpers/pgliteDb'
 
 const P1 = '3f2b8c1e-9a4d-4e6b-8c7a-1d2e3f4a5b6c'
@@ -77,5 +77,19 @@ describe('feedback store', () => {
     await upsertFeedback(P1, fb({ stars: 3 }), db)
     await upsertFeedback(P1, fb({ stars: 4 }), db)
     expect((await db.query('select 1 from profiles')).length).toBe(1)
+  })
+
+  it('summarises feedback per route, labelled or not, in the order asked', async () => {
+    await upsertFeedback(P1, fb({ routeId: 'Capital', vehicleLabel: null, tripId: 'L1', stars: 4, issue: 'cleanliness' }), db)
+    await upsertFeedback(P2, fb({ routeId: 'Capital', vehicleLabel: null, tripId: 'L1', stars: 2, issue: 'cleanliness' }), db)
+    await upsertFeedback(P1, fb({ routeId: '9', tripId: 'B1', issue: 'too_full' }), db)
+    const [none, capital, nine] = await routeFeedbackSummaries(['R404', 'Capital', '9'], db)
+    expect(none).toEqual({ routeId: 'R404', averageStars: null, ratingCount: 0, issues: { cleanliness: 0, safety: 0, disruption: 0, too_full: 0 } })
+    expect(capital.averageStars).toBe(3)
+    expect(capital.ratingCount).toBe(2)
+    expect(capital.issues.cleanliness).toBe(2)
+    expect(nine.ratingCount).toBe(0)
+    expect(nine.issues.too_full).toBe(1)
+    expect(await routeFeedbackSummaries([], db)).toEqual([])
   })
 })

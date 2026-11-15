@@ -71,9 +71,9 @@ describe('SearchForm', () => {
     await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(2))
     const opts = screen.getAllByRole('option')
     expect(opts[0].textContent).toContain('Church Stop')
-    // A stop named "... Stop" is a Valley Line station: it gets the Station tag, addresses get Place.
+    // A stop named "... Stop" is a Valley Line station: it gets the Station tag, addresses get Address.
     expect(opts[0].textContent).toContain('Station')
-    expect(opts[1].textContent).toContain('Place')
+    expect(opts[1].textContent).toContain('Address')
     expect(opts[1].textContent).toContain('Church Rd')
   })
 

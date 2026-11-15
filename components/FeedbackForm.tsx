@@ -4,6 +4,7 @@ import { useState } from 'react'
 import type { Accuracy, FeedbackRequest, Issue, RideLink } from '@/src/contract/schema'
 import Slider from './Slider'
 import { invalidateVehicleSummary } from './VehicleSummary'
+import { invalidateRouteReviews } from './RouteReviews'
 
 type Key = keyof Accuracy
 const ISSUES: { value: Issue | 'none'; label: string }[] = [
@@ -16,7 +17,14 @@ const ISSUES: { value: Issue | 'none'; label: string }[] = [
 
 type Status = 'idle' | 'sending' | 'done' | 'invalid' | 'failed' | 'empty' | 'network'
 
-export default function FeedbackForm({ ride }: { ride: RideLink }) {
+export default function FeedbackForm({
+  ride,
+  onDone,
+}: {
+  ride: RideLink
+  /** Called once the feedback is saved (the ride sheet closes and the cards refresh). */
+  onDone?: () => void
+}) {
   const [stars, setStars] = useState<number | undefined>()
   const [acc, setAcc] = useState<Accuracy>({})
   const [issue, setIssue] = useState<Issue | 'none'>('none')
@@ -38,7 +46,7 @@ export default function FeedbackForm({ ride }: { ride: RideLink }) {
       serviceDate: ride.serviceDate,
       accuracy,
     }
-    if (stars !== undefined && ride.vehicleLabel !== null) body.stars = stars
+    if (stars !== undefined) body.stars = stars
     if (issue !== 'none') body.issue = issue
     if (trimmed) body.note = trimmed
     const answered =
@@ -57,7 +65,9 @@ export default function FeedbackForm({ ride }: { ride: RideLink }) {
       })
       if (res.ok) {
         if (ride.vehicleLabel !== null) invalidateVehicleSummary(ride.vehicleLabel)
+        invalidateRouteReviews(ride.routeId)
         setStatus('done')
+        onDone?.()
       } else {
         let code: unknown
         if (res.status === 400) code = await res.json().then((j: { error?: unknown }) => j?.error).catch(() => undefined)
@@ -77,30 +87,28 @@ export default function FeedbackForm({ ride }: { ride: RideLink }) {
     <form onSubmit={submit} className="flex flex-col gap-5">
       <h1 className="text-lg font-semibold">{title}</h1>
 
-      {ride.vehicleLabel && (
-        <div className="flex flex-col gap-1">
-          <span id="stars-label" className="text-sm font-medium">
-            How was this bus?
-          </span>
-          <div className="flex gap-1" role="radiogroup" aria-labelledby="stars-label">
-            {[1, 2, 3, 4, 5].map((n) => (
-              <button
-                key={n}
-                type="button"
-                role="radio"
-                aria-checked={stars === n}
-                aria-label={`${n} stars`}
-                onClick={() => setStars(n)}
-                className={`h-11 min-w-11 flex-1 rounded-lg border text-lg ${
-                  stars !== undefined && n <= stars ? 'bg-yellow-300 text-black' : 'bg-transparent'
-                }`}
-              >
-                ★
-              </button>
-            ))}
-          </div>
+      <div className="flex flex-col gap-1">
+        <span id="stars-label" className="text-sm font-medium">
+          {ride.vehicleLabel ? 'How was this bus?' : 'How was this ride?'}
+        </span>
+        <div className="flex gap-1" role="radiogroup" aria-labelledby="stars-label">
+          {[1, 2, 3, 4, 5].map((n) => (
+            <button
+              key={n}
+              type="button"
+              role="radio"
+              aria-checked={stars === n}
+              aria-label={`${n} stars`}
+              onClick={() => setStars(n)}
+              className={`h-11 min-w-11 flex-1 rounded-lg border text-lg ${
+                stars !== undefined && n <= stars ? 'bg-yellow-300 text-black' : 'bg-transparent'
+              }`}
+            >
+              ★
+            </button>
+          ))}
         </div>
-      )}
+      </div>
 
       <section className="flex flex-col gap-4">
         <h2 className="text-sm font-semibold">How accurate was our information?</h2>

@@ -3,6 +3,9 @@ import type { Place } from './place'
 export type { Place }
 
 const MAX_RESULTS = 5
+/** Downtown Edmonton, and a radius that covers the ETS service area (St. Albert, Leduc, Spruce Grove, airport). */
+export const SEARCH_CENTER = { lat: 53.5461, lon: -113.4938 }
+export const SEARCH_RADIUS_M = 40000
 
 type TomTomResult = {
   poi?: { name?: string }
@@ -38,8 +41,10 @@ export async function suggestAddresses(q: string, signal: AbortSignal): Promise<
     typeahead: 'true',
     limit: String(MAX_RESULTS),
     countrySet: 'CA',
-    lat: '53.5461',
-    lon: '-113.4938',
+    lat: String(SEARCH_CENTER.lat),
+    lon: String(SEARCH_CENTER.lon),
+    // Restrict, not just bias: a place 300 km away has no transit trip to plan.
+    radius: String(SEARCH_RADIUS_M),
   })
   const url = `https://api.tomtom.com/search/2/search/${encodeURIComponent(q)}.json?${params}`
   const res = await fetch(url, { signal })

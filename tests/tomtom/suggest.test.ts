@@ -48,7 +48,7 @@ describe('suggestAddresses', () => {
     const out = await suggestAddresses('chur ch', ac.signal)
     const [url, init] = f.mock.calls[0]
     expect(url).toContain('/search/2/search/chur%20ch.json')
-    for (const p of ['key=k', 'typeahead=true', 'limit=5', 'countrySet=CA', 'lat=53.5461', 'lon=-113.4938']) {
+    for (const p of ['key=k', 'typeahead=true', 'limit=5', 'countrySet=CA', 'lat=53.5461', 'lon=-113.4938', 'radius=40000']) {
       expect(url).toContain(p)
     }
     expect(init.signal).toBe(ac.signal)

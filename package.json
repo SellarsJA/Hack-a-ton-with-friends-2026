@@ -12,7 +12,8 @@
     "test": "vitest run",
     "import-gtfs": "tsx scripts/import-gtfs/index.ts",
     "db:migrate": "tsx scripts/apply-schema.ts",
-    "db:schema": "tsx scripts/apply-schema.ts"
+    "db:schema": "tsx scripts/apply-schema.ts",
+    "db:seed-reviews": "tsx scripts/seed-reviews/index.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.2.1",

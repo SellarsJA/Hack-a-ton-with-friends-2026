@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import * as maplibregl from 'maplibre-gl'
 import type { Option, Vehicle } from '@/src/contract/schema'
 import {
@@ -16,6 +16,7 @@ import {
 import { OCCUPANCY_TEXT } from '@/components/format'
 import { useMaplibre } from '@/src/map/useMaplibre'
 import { placeTag } from '@/src/map/placeTag'
+import { tomtomTrafficFlowUrl } from '@/src/tomtom/tiles'
 
 type Props = {
   options: Option[]
@@ -31,6 +32,7 @@ const SOURCE = 'lines'
 const VEHICLE_SOURCE = 'vehicles'
 const VEHICLE_LAYER = 'vehicles-dots'
 const STOP_SOURCE = 'stops'
+const TRAFFIC_LAYER = 'traffic-flow'
 const NO_VEHICLES: Vehicle[] = []
 
 /** The selected option's transit trips mapped to their mode colour, plus the labels of its rail vehicles. */
@@ -84,10 +86,13 @@ export default function TripMap({
   const endsRef = useRef<maplibregl.Marker[]>([])
   const onSelectRef = useRef(onSelect)
   const latest = useRef({ options, selectedId, showWalking, vehicles })
+  const [showTraffic, setShowTraffic] = useState(false)
+  const trafficRef = useRef(showTraffic)
 
   useEffect(() => {
     onSelectRef.current = onSelect
     latest.current = { options, selectedId, showWalking, vehicles }
+    trafficRef.current = showTraffic
   })
 
   // Add the sources, layers and handlers once the map has loaded.
@@ -95,6 +100,18 @@ export default function TripMap({
     if (!map) return
     {
       const { options, selectedId, showWalking } = latest.current
+      // Live traffic goes first so it draws under the trip lines. Hidden until the rider turns it on;
+      // a hidden layer requests no tiles.
+      if (key) {
+        map.addSource(TRAFFIC_LAYER, { type: 'raster', tiles: [tomtomTrafficFlowUrl(key)], tileSize: 256 })
+        map.addLayer({
+          id: TRAFFIC_LAYER,
+          type: 'raster',
+          source: TRAFFIC_LAYER,
+          layout: { visibility: trafficRef.current ? 'visible' : 'none' },
+          paint: { 'raster-opacity': 0.85 },
+        })
+      }
       map.addSource(SOURCE, { type: 'geojson', data: buildLineFeatures(options, selectedId, showWalking) })
       // Literal widths. A data-driven width was collapsing the stroke to a hairline on the basemap.
       // Only the selected option gets a casing; the others are thin, faded and still tappable.
@@ -194,13 +211,18 @@ export default function TripMap({
       endsRef.current.forEach((m) => m.remove())
       endsRef.current = []
     }
-  }, [map])
+  }, [map, key])
 
   // Fit again when a later search replaces the options. Before 'load', this is a no-op.
   useEffect(() => {
     if (!map) return
     fitRoute(map, options)
   }, [options, map])
+
+  useEffect(() => {
+    if (!map?.getLayer?.(TRAFFIC_LAYER)) return
+    map.setLayoutProperty(TRAFFIC_LAYER, 'visibility', showTraffic ? 'visible' : 'none')
+  }, [showTraffic, map])
 
   // Line data follows options/selection/walking.
   useEffect(() => {
@@ -253,5 +275,30 @@ export default function TripMap({
       </div>
     )
   }
-  return <div ref={container} className="h-full w-full" />
+  return (
+    <div className="relative h-full w-full">
+      <div ref={container} className="h-full w-full" />
+      <button
+        type="button"
+        aria-pressed={showTraffic}
+        onClick={() => setShowTraffic((t) => !t)}
+        className={`absolute right-2 top-2 z-10 flex min-h-9 items-center gap-1.5 rounded-full px-3 text-sm font-semibold shadow-md ${
+          showTraffic ? 'bg-zinc-900 text-white' : 'bg-white text-zinc-900'
+        }`}
+      >
+        <span aria-hidden className={`h-2 w-2 rounded-full ${showTraffic ? 'bg-emerald-400' : 'bg-zinc-400'}`} />
+        Traffic
+      </button>
+      {showTraffic && (
+        <div
+          data-testid="traffic-legend"
+          className="absolute bottom-7 left-2 z-10 flex items-center gap-1.5 rounded-md bg-white/95 px-2 py-1 text-xs font-medium text-zinc-900 shadow"
+        >
+          <span>Fast</span>
+          <span aria-hidden className="h-1.5 w-14 rounded-full bg-gradient-to-r from-green-500 via-orange-400 to-red-600" />
+          <span>Slow</span>
+        </div>
+      )}
+    </div>
+  )
 }
